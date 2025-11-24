@@ -1,6 +1,6 @@
 [submodule "DroCo/Submodules/mrayGStreamerUnity"]
 	path = DroCo/Submodules/mrayGStreamerUnity
-	url = git@github.com:mrayy/mrayGStreamerUnity.git
+	url = https://github.com/mrayy/mrayGStreamerUnity
 [submodule "DroCo/Submodules/droco_private"]
 	path = DroCo/Submodules/droco_private
-	url = git@github.com:robofit/droco_private.git
+	url = https://github.com/robofit/droco_private
