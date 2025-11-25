@@ -1,171 +1,265 @@
 using System.Collections.Generic;
+using Esri.GameEngine.Map;
 using UnityEngine;
-using UnityEngine.Rendering;
-using Esri.ArcGISMapsSDK.Components;
-using Esri.ArcGISMapsSDK.Utils.GeoCoord;
 
 public class BuildingClickOblet : MonoBehaviour {
     [SerializeField] private Camera arcgisCamera;
     [SerializeField] private float radiusMeters = 15f;
     [SerializeField] private int numPoints = 6;
-    [SerializeField] private float flightHeight = 10f; // relative to hit point Y
+    [SerializeField] private float flightHeight = 10f;
 
     [SerializeField] private GameObject waypointPrefab;
     [SerializeField] private Transform missionParent;
-    [SerializeField] private Material material;
 
-    // Debug / runtime material overrides
-    [SerializeField] private bool enableDebugMarkers = true;
-    private Material runtimeWaypointMaterial;
-    private Material runtimeLineMaterial;
+    [Header("Occlusion")]
+    public LayerMask occlusionMask;  // nastavíš na "Occluder"
 
-    private float lastClickTime = 0f;
-    private float doubleClickThreshold = 0.25f;
+    private float lastClick = 0f;
+    private float doubleClickTime = 0.25f;
 
-    private List<GameObject> waypointInstances = new List<GameObject>();
-    private GameObject currentLineObject;
+    private List<Renderer> waypointRenderers = new List<Renderer>();
+    private List<(Vector3 a, Vector3 b, LineRenderer lr)> lines = new List<(Vector3, Vector3, LineRenderer)>();
+
+    private List<GameObject> occluders = new List<GameObject>();
+
 
     void Update() {
         if (Input.GetMouseButtonDown(0)) {
-            float timeSinceLastClick = Time.time - lastClickTime;
-            lastClickTime = Time.time;
-            if (timeSinceLastClick <= doubleClickThreshold) {
+            float delta = Time.time - lastClick;
+            lastClick = Time.time;
+
+            if (delta <= doubleClickTime) {
                 Ray ray = arcgisCamera.ScreenPointToRay(Input.mousePosition);
-                if (Physics.Raycast(ray, out RaycastHit hit, 500f)) {
-                    Vector3 center = hit.point;
-                    GenerateCircularMission(center);
+                if (Physics.Raycast(ray, out var hit, 500f)) {
+                    // vytvoříme occluder pro tu budovu
+                    CreateOccluderBoxFromHit(hit);
+
+                    // vygenerujeme waypointy
+                    GenerateCircularMission(hit.point);
                 }
             }
         }
     }
 
+
+    // =============================================================
+    //          CREATE SIMPLE OCCLUDER BOX (VARIANTA A)
+    // =============================================================
+    void CreateOccluderBox(Vector3 center) {
+        float maxDistance = 200f;
+
+        Vector3[] dirs = {
+        Vector3.right,
+        Vector3.left,
+        Vector3.forward,
+        Vector3.back,
+        Vector3.up,
+        Vector3.down
+    };
+
+        float minX = center.x, maxX = center.x;
+        float minZ = center.z, maxZ = center.z;
+        float minY = center.y, maxY = center.y;
+
+        foreach (var d in dirs) {
+            if (Physics.Raycast(center, d, out RaycastHit hit, maxDistance)) {
+                Vector3 p = hit.point;
+
+                minX = Mathf.Min(minX, p.x);
+                maxX = Mathf.Max(maxX, p.x);
+
+                minZ = Mathf.Min(minZ, p.z);
+                maxZ = Mathf.Max(maxZ, p.z);
+
+                minY = Mathf.Min(minY, p.y);
+                maxY = Mathf.Max(maxY, p.y);
+            }
+        }
+
+        Vector3 size = new Vector3(
+            Mathf.Abs(maxX - minX),
+            Mathf.Abs(maxY - minY),
+            Mathf.Abs(maxZ - minZ)
+        );
+
+        Vector3 pos = new Vector3(
+            (minX + maxX) / 2f,
+            (minY + maxY) / 2f,
+            (minZ + maxZ) / 2f
+        );
+
+        GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        box.name = "OccluderBox";
+        box.transform.parent = missionParent;
+        box.transform.position = pos;
+        box.transform.localScale = size;
+
+        // nastav light layer pro occlusion
+        box.layer = LayerMask.NameToLayer("Buildings");
+
+        // 🟦 DEBUG — ZVIDITELNĚNÍ KOSTIČKY
+        MeshRenderer rend = box.GetComponent<MeshRenderer>();
+        Material debugMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+
+        debugMat.SetFloat("_Surface", 1);       // Transparent
+        debugMat.color = new Color(0f, 0f, 1f, 0.15f); // světle modrá, průhledná
+        debugMat.renderQueue = 3000;
+
+        rend.material = debugMat;
+
+        occluders.Add(box);
+    }
+
+
+    // =============================================================
+    //               GENERATE WAYPOINTS A LINIE
+    // =============================================================
     void GenerateCircularMission(Vector3 center) {
-        // Destroy previous waypoints and debug markers
-        foreach (var wp in waypointInstances)
-            Destroy(wp);
-        waypointInstances.Clear();
+        // vyčištění starých
+        foreach (var r in waypointRenderers)
+            Destroy(r.gameObject);
 
-        // Destroy previous line
-        if (currentLineObject != null)
-            Destroy(currentLineObject);
+        foreach (var line in lines)
+            Destroy(line.lr.gameObject);
 
-        // Prepare runtime materials (do not modify project assets)
-        EnsureRuntimeMaterials();
-
-        // Create LineRenderer object
-        currentLineObject = new GameObject("WaypointLine");
-        currentLineObject.transform.parent = missionParent;
-        LineRenderer line = currentLineObject.AddComponent<LineRenderer>();
-        line.useWorldSpace = true; // important: keep world-space positions so depth testing is correct
-        line.material = runtimeLineMaterial;
-        line.startWidth = 0.2f;
-        line.endWidth = 0.2f;
-        line.positionCount = numPoints + 1;
-        line.loop = true;
-        line.alignment = LineAlignment.View; // keep line visible from camera angle (still depth-tested)
+        waypointRenderers.Clear();
+        lines.Clear();
 
         float angleStep = 360f / numPoints;
+        Vector3[] pts = new Vector3[numPoints + 1];
+
         for (int i = 0; i < numPoints; i++) {
-            float angle = i * angleStep * Mathf.Deg2Rad;
-            float dx = Mathf.Cos(angle) * radiusMeters;
-            float dz = Mathf.Sin(angle) * radiusMeters;
+            float rad = i * angleStep * Mathf.Deg2Rad;
+            pts[i] = new Vector3(
+                center.x + Mathf.Cos(rad) * radiusMeters,
+                center.y + flightHeight,
+                center.z + Mathf.Sin(rad) * radiusMeters
+            );
 
-            Vector3 wp = new Vector3(center.x + dx, center.y + flightHeight, center.z + dz);
-
-            // Instantiate waypoint prefab (if provided) and override its material for correct depth behavior
-            if (waypointPrefab) {
-                GameObject instance = Instantiate(waypointPrefab, wp, Quaternion.identity, missionParent);
-
-                // get renderer and replace material instance so it writes depth and uses opaque queue
-                Renderer r = instance.GetComponent<Renderer>();
-                if (r) {
-                    // assign a new instance of runtimeWaypointMaterial so each marker can be adjusted independently
-                    Material matInstance = new Material(runtimeWaypointMaterial);
-                    matInstance.color = Color.red;
-                    matInstance.renderQueue = (int) RenderQueue.Geometry;
-                    r.material = matInstance;
-                }
-
-                waypointInstances.Add(instance);
-            }
-
-            // Optionally add small debug sphere so you can visually inspect exact world positions
-            if (enableDebugMarkers) {
-                GameObject dbg = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                dbg.name = "WaypointDebugMarker";
-                dbg.transform.position = wp;
-                dbg.transform.localScale = Vector3.one * 0.5f;
-                dbg.transform.parent = missionParent;
-                // remove collider to avoid physics interference
-                Collider col = dbg.GetComponent<Collider>();
-                if (col)
-                    Destroy(col);
-
-                Renderer dbgR = dbg.GetComponent<Renderer>();
-                if (dbgR) {
-                    Material dbgMat = new Material(runtimeWaypointMaterial);
-                    dbgMat.color = new Color(1f, 1f, 0f, 1f); // yellow
-                    dbgMat.renderQueue = (int) RenderQueue.Geometry;
-                    dbgR.material = dbgMat;
-                }
-
-                waypointInstances.Add(dbg);
-            }
-
-            line.SetPosition(i, wp);
-
-            // Debug log: camera distance and local Y for quick verification
-            float camDist = (arcgisCamera.transform.position - wp).magnitude;
-            Debug.Log($"Waypoint[{i}] worldPos={wp} camDist={camDist:F2} hitY={center.y:F2}");
+            GameObject wp = Instantiate(waypointPrefab, pts[i], Quaternion.identity, missionParent);
+            Renderer r = wp.GetComponentInChildren<Renderer>();
+            if (r)
+                waypointRenderers.Add(r);
         }
 
-        // close the loop
-        line.SetPosition(numPoints, line.GetPosition(0));
+        pts[numPoints] = pts[0];
 
-        Debug.Log("Generated " + numPoints + " red waypoints and connected them with a line (runtime materials applied).");
-    }
+        for (int i = 0; i < numPoints; i++) {
+            GameObject segObj = new GameObject("LineSeg_" + i);
+            segObj.transform.parent = missionParent;
 
-    private void EnsureRuntimeMaterials() {
-        // Create or clone runtime line material
-        if (runtimeLineMaterial == null) {
-            if (material != null) {
-                // clone provided material to avoid editing asset
-                runtimeLineMaterial = new Material(material);
-            } else {
-                // fallback: try URP Unlit, otherwise default shader
-                Shader s = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default") ?? Shader.Find("Standard");
-                runtimeLineMaterial = new Material(s);
-            }
+            LineRenderer lr = segObj.AddComponent<LineRenderer>();
+            lr.material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            lr.material.color = Color.green;
+            lr.startWidth = lr.endWidth = 0.2f;
+            lr.positionCount = 2;
+            lr.useWorldSpace = true;
+            lr.SetPosition(0, pts[i]);
+            lr.SetPosition(1, pts[i + 1]);
 
-            // prefer opaque geometry queue so depth writes behave normally
-            runtimeLineMaterial.renderQueue = (int) RenderQueue.Geometry;
-            // try to enable ZWrite and standard ZTest - many URP shaders expose these keywords/properties
-            if (runtimeLineMaterial.HasProperty("_ZWrite"))
-                runtimeLineMaterial.SetInt("_ZWrite", 1);
-            if (runtimeLineMaterial.HasProperty("_Surface")) {
-                // Some URP shaders use _Surface to toggle Transparent/Opaque (0 = Opaque)
-                runtimeLineMaterial.SetFloat("_Surface", 0f);
-            }
-            // ensure a visible color if possible
-            if (runtimeLineMaterial.HasProperty("_BaseColor"))
-                runtimeLineMaterial.SetColor("_BaseColor", Color.green);
-            else if (runtimeLineMaterial.HasProperty("_Color"))
-                runtimeLineMaterial.SetColor("_Color", Color.green);
-        }
-
-        // Create runtime waypoint material
-        if (runtimeWaypointMaterial == null) {
-            Shader s = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Sprites/Default") ?? Shader.Find("Standard");
-            runtimeWaypointMaterial = new Material(s);
-            runtimeWaypointMaterial.renderQueue = (int) RenderQueue.Geometry;
-            if (runtimeWaypointMaterial.HasProperty("_ZWrite"))
-                runtimeWaypointMaterial.SetInt("_ZWrite", 1);
-            if (runtimeWaypointMaterial.HasProperty("_Surface"))
-                runtimeWaypointMaterial.SetFloat("_Surface", 0f);
-            if (runtimeWaypointMaterial.HasProperty("_BaseColor"))
-                runtimeWaypointMaterial.SetColor("_BaseColor", Color.red);
-            else if (runtimeWaypointMaterial.HasProperty("_Color"))
-                runtimeWaypointMaterial.SetColor("_Color", Color.red);
+            lines.Add((pts[i], pts[i + 1], lr));
         }
     }
+
+
+    // =============================================================
+    //                REALTIME OCCLUSION
+    // =============================================================
+    void LateUpdate() {
+        Vector3 cam = arcgisCamera.transform.position;
+
+        // waypointy
+        foreach (var r in waypointRenderers) {
+            if (r == null)
+                continue;
+
+            Vector3 p = r.transform.position;
+            Vector3 dir = p - cam;
+            float dist = dir.magnitude;
+
+            bool hide = Physics.Raycast(cam, dir.normalized, dist - 0.1f, occlusionMask);
+            r.enabled = !hide;
+        }
+
+        // linie
+        foreach (var seg in lines) {
+            if (seg.lr == null)
+                continue;
+
+            Vector3 mid = (seg.a + seg.b) / 2f;
+            Vector3 dir = mid - cam;
+            float dist = dir.magnitude;
+
+            bool hide = Physics.Raycast(cam, dir.normalized, dist - 0.1f, occlusionMask);
+            seg.lr.enabled = !hide;
+        }
+    }
+    void CreateOccluderBoxFromHit(RaycastHit hit) {
+        Vector3 origin = hit.point;
+
+        float maxDist = 40f;
+        LayerMask mask = LayerMask.GetMask("Buildings");
+
+        List<Vector3> pts = new List<Vector3>();
+
+        // horizontální sampling 360°
+        for (int i = 0; i < 36; i++) {
+            float ang = i * 10f * Mathf.Deg2Rad;
+            Vector3 dir = new Vector3(Mathf.Cos(ang), 0, Mathf.Sin(ang));
+
+            if (Physics.Raycast(origin, dir, out RaycastHit h, maxDist, mask)) {
+                pts.Add(h.point);
+            }
+        }
+
+        // vertikální ray nahoru a dolů (pro výšku)
+        float minY = origin.y;
+        float maxY = origin.y;
+
+        for (float y = -1f; y <= 1f; y += 2f) {
+            if (Physics.Raycast(origin, new Vector3(0, y, 0), out RaycastHit h, 30f, mask)) {
+                minY = Mathf.Min(minY, h.point.y);
+                maxY = Mathf.Max(maxY, h.point.y);
+            }
+        }
+
+        if (pts.Count == 0) {
+            Debug.LogWarning("No contour points detected!");
+            return;
+        }
+
+        // vypočítat AABB z nasbíraných bodů
+        float minX = float.MaxValue, minZ = float.MaxValue;
+        float maxX = float.MinValue, maxZ = float.MinValue;
+
+        foreach (var p in pts) {
+            minX = Mathf.Min(minX, p.x);
+            maxX = Mathf.Max(maxX, p.x);
+            minZ = Mathf.Min(minZ, p.z);
+            maxZ = Mathf.Max(maxZ, p.z);
+        }
+
+        Vector3 center = new Vector3((minX + maxX) / 2f, (minY + maxY) / 2f, (minZ + maxZ) / 2f);
+        Vector3 size = new Vector3(maxX - minX, maxY - minY, maxZ - minZ);
+
+        // vytvoření debug boxu
+        GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        box.name = "OccluderBox";
+        box.transform.parent = missionParent;
+        box.transform.position = center;
+        box.transform.localScale = size;
+
+        var rend = box.GetComponent<MeshRenderer>();
+        Material m = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        m.color = new Color(0, 0, 1, 0.25f);
+        m.SetFloat("_Surface", 1);
+        m.renderQueue = 3000;
+
+        rend.material = m;
+
+        box.layer = LayerMask.NameToLayer("Buildings");
+    }
+
+
+
 }
