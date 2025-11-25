@@ -19,7 +19,7 @@ MonoBehaviour:
     width: 1706.6667
     height: 917.3334
   m_ShowMode: 4
-  m_Title: Project
+  m_Title: Inspector
   m_RootView: {fileID: 2}
   m_MinSize: {x: 875, y: 300}
   m_MaxSize: {x: 10000, y: 10000}
@@ -372,8 +372,8 @@ MonoBehaviour:
   m_SceneHierarchy:
     m_TreeViewState:
       scrollPos: {x: 0, y: 0}
-      m_SelectedIDs: 0e7a0000
-      m_LastClickedID: 0
+      m_SelectedIDs: bcf9ffff
+      m_LastClickedID: -1604
       m_ExpandedIDs: c6f9ffff
       m_RenameOverlay:
         m_UserAcceptedRename: 0
@@ -766,7 +766,7 @@ MonoBehaviour:
   m_Rotation:
     m_Target: {x: -0.1824174, y: 0.4330125, z: -0.08994578, w: -0.87817514}
     speed: 2
-    m_Value: {x: -0.1824174, y: 0.43301246, z: -0.08994578, w: -0.87817514}
+    m_Value: {x: -0.18241213, y: 0.433, z: -0.089943185, w: -0.8781498}
   m_Size:
     m_Target: 725.3701
     speed: 2
@@ -1894,7 +1894,7 @@ MonoBehaviour:
     m_SkipHidden: 0
     m_SearchArea: 1
     m_Folders:
-    - Assets/Submodules/ArcGIS
+    - Assets/Scripts/2DScanBuild
     m_Globs: []
     m_OriginalText: 
     m_ImportLogFlags: 0
@@ -1902,16 +1902,16 @@ MonoBehaviour:
   m_ViewMode: 1
   m_StartGridSize: 16
   m_LastFolders:
-  - Assets/Submodules/ArcGIS
+  - Assets/Scripts/2DScanBuild
   m_LastFoldersGridSize: 16
   m_LastProjectPath: "C:\\Users\\V\xE1clav Sov\xE1k\\Projects\\drone_vstool\\DroCo"
   m_LockTracker:
     m_IsLocked: 0
   m_FolderTreeState:
-    scrollPos: {x: 0, y: 0}
-    m_SelectedIDs: 0a8a0000
-    m_LastClickedID: 35338
-    m_ExpandedIDs: 000000009489000096890000988900009a890000cc89000000ca9a3bffffff7f
+    scrollPos: {x: 0, y: 120}
+    m_SelectedIDs: 188a0000
+    m_LastClickedID: 35352
+    m_ExpandedIDs: 000000009489000096890000988900009a8900009c890000b889000000ca9a3bffffff7f
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -1939,7 +1939,7 @@ MonoBehaviour:
     scrollPos: {x: 0, y: 0}
     m_SelectedIDs: 
     m_LastClickedID: 0
-    m_ExpandedIDs: 000000009489000096890000988900009a890000
+    m_ExpandedIDs: 000000009489000096890000988900009a8900009c890000
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -1966,7 +1966,7 @@ MonoBehaviour:
   m_ListAreaState:
     m_SelectedInstanceIDs: 
     m_LastClickedInstanceID: 0
-    m_HadKeyboardFocusLastEvent: 0
+    m_HadKeyboardFocusLastEvent: 1
     m_ExpandedInstanceIDs: c62300005886000054780000bc8c00005eb8000000000000
     m_RenameOverlay:
       m_UserAcceptedRename: 0
