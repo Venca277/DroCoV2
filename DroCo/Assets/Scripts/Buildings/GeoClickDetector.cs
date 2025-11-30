@@ -9,19 +9,18 @@ public class TestGeo : MonoBehaviour {
     private ArcGISMapComponent mapComponent;
 
     void Start() {
-        // Najdi ArcGISMapComponent v parent objektech nebo jako fallback v celé scéně
         mapComponent = GetComponentInParent<ArcGISMapComponent>();
         if (mapComponent == null)
             mapComponent = FindObjectOfType<ArcGISMapComponent>();
 
         if (mapComponent == null) {
-            Debug.LogError("ArcGISMapComponent not found! Make sure this script is a child of the map object or that an ArcGISMapComponent exists in the scene.");
+            Debug.LogError("ArcGISMapComponent not found!");
         }
 
         if (arcgisCamera == null) {
             arcgisCamera = Camera.main;
             if (arcgisCamera == null)
-                Debug.LogWarning("arcgisCamera not assigned and Camera.main is null. Assign the ArcGIS camera in the Inspector.");
+                Debug.LogWarning("arcgisCamera not assigned and Camera.main");
         }
     }
 
@@ -35,7 +34,6 @@ public class TestGeo : MonoBehaviour {
                     return;
                 }
 
-                // Správné volání: použijeme EngineToGeographic, které interně bere v úvahu WorldMatrix mapy.
                 ArcGISPoint geo = mapComponent.EngineToGeographic(hit.point);
 
                 Debug.Log($"Lon: {geo.X}, Lat: {geo.Y}, Alt: {geo.Z}");

@@ -7,7 +7,6 @@ using System.Globalization;
 public class OverpassClient : MonoBehaviour {
     public IEnumerator FetchBuildingData(double lat, double lon, System.Action<string> callback) {
 
-        // radius will be changes by UI (in meters)
         int radius = 80;
 
         //formating lat and long to contain allowed chars like . not ,

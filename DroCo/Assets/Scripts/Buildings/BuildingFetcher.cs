@@ -16,36 +16,30 @@ public class BuildingFetcher : MonoBehaviour {
             float timeSinceLastClick = Time.time - lastClickTime;
             lastClickTime = Time.time;
 
-            // pokud to nebyl double-click → ignorujeme
             if (timeSinceLastClick > doubleClickThreshold)
                 return;
 
-            // DOUBLE-CLICK
             Ray ray = arcgisCamera.ScreenPointToRay(Input.mousePosition);
 
             if (!Physics.Raycast(ray, out RaycastHit hit, 1000f))
                 return;
 
-            // World → Geo
             ArcGISPoint geo = map.EngineToGeographic(hit.point);
             double lat = geo.Y;
             double lon = geo.X;
 
-            Debug.Log($"📍 DOUBLE-CLICK GEO: lat={lat}, lon={lon}");
+            Debug.Log($"DOUBLE-CLICK GEO: lat={lat}, lon={lon}");
 
-            // Fetch OSM
             StartCoroutine(overpass.FetchBuildingData(lat, lon, (json) => {
                 if (json == null) {
                     Debug.LogError("OSM fetch failed.");
                     return;
                 }
 
-                Debug.Log("📦 JSON fetched successfully.");
+                Debug.Log("JSON fetched successfully.");
 
-                // Parse
                 OSMRoot root = JsonUtility.FromJson<OSMRoot>(json);
 
-                // Select building
                 OSMElement building = OSMBuildingSelector.FindClosestBuilding(root, lat, lon);
 
                 if (building == null) {
@@ -53,16 +47,15 @@ public class BuildingFetcher : MonoBehaviour {
                     return;
                 }
 
-                Debug.Log($"🏠 Selected building ID: {building.id} | points: {building.geometry.Count}");
+                Debug.Log($"Selected building ID: {building.id} | points: {building.geometry.Count}");
 
-                // Convert polygon → Unity world positions
-                var unityPoints = OSMToUnity.ConvertPolygonToUnity(building, map);
+                var unityPoints = OSMToUnity.ConvertPolygonToUnity(building, map, geo.Z);
 
                 foreach (var p in unityPoints) {
                     Debug.Log($"Unity world point: {p}");
                 }
 
-                Debug.Log("✔ Building polygon converted to Unity coordinates.");
+                Debug.Log("Building polygon converted to Unity coordinates.");
                 CreateBuildingMesh(unityPoints);
             }));
         }
@@ -74,55 +67,53 @@ public class BuildingFetcher : MonoBehaviour {
             return;
         }
 
-        // --- IMPORTANT FIXES ---
-        // 1) Mesh vertices must have correct bounds for Unity frustum culling => call RecalculateBounds()
-        // 2) Use local-space vertices + place GameObject at polygon centroid to avoid floating precision issues
-        // 3) Disable backface culling or ensure normals orientation if polygon winding is unknown
-
-        // compute centroid to use as GameObject position
         Vector3 centroid = Vector3.zero;
         foreach (var wp in worldPoints)
             centroid += wp;
         centroid /= worldPoints.Count;
 
-        // create new GameObject and set its position to centroid
         GameObject building = new GameObject("OSM_Building");
         building.transform.position = centroid;
+        building.layer = 0;
 
         var mf = building.AddComponent<MeshFilter>();
         var mr = building.AddComponent<MeshRenderer>();
 
-        // simple material (URP Lit) - force opaque and disable culling so thin surfaces are visible
-        Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-        // ensure opaque surface (if shader exposes _Surface)
+        Shader unlit = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
+        Material mat = new Material(unlit);
         if (mat.HasProperty("_Surface"))
             mat.SetFloat("_Surface", 0f);
-        // disable backface culling if supported by shader (makes mesh visible regardless of winding)
-        if (mat.HasProperty("_Cull"))
-            mat.SetInt("_Cull", (int) UnityEngine.Rendering.CullMode.Off);
-        // fallback: set color (try common properties)
+        if (mat.HasProperty("_ZWrite"))
+            mat.SetInt("_ZWrite", 1);
+        mat.renderQueue = (int) UnityEngine.Rendering.RenderQueue.Geometry;
         if (mat.HasProperty("_BaseColor"))
-            mat.SetColor("_BaseColor", new Color(0f, 0.4f, 1f, 0.9f));
+            mat.SetColor("_BaseColor", new Color(0f, 0.4f, 1f, 1f));
         else
-            mat.color = new Color(0f, 0.4f, 1f, 0.9f);
+            mat.color = new Color(0f, 0.4f, 1f, 1f);
 
         mr.material = mat;
+        mr.material.renderQueue = 4000;
+        if (mr.material.HasProperty("_ZTest")) mr.material.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        mr.receiveShadows = false;
+        mr.allowOcclusionWhenDynamic = false;
 
-        // build mesh in local space (vertices = world - centroid)
         Mesh mesh = new Mesh();
         mesh.name = "OSM_Building_Mesh";
 
         int n = worldPoints.Count;
+        if (n * 2 > 65000)
+            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+
         Vector3[] verts = new Vector3[n * 2];
         for (int i = 0; i < n; i++) {
             Vector3 local = worldPoints[i] - centroid;
-            verts[i] = local; // bottom
-            verts[i + n] = local + new Vector3(0, 8f, 0); // top (extrude)
+            verts[i] = local;
+            verts[i + n] = local + new Vector3(0, 8f, 0);
         }
 
         mesh.vertices = verts;
 
-        // triangulate bottom (fan) — works only reliably for convex polygons
         List<int> tris = new List<int>();
         for (int i = 1; i < n - 1; i++) {
             tris.Add(0);
@@ -130,7 +121,6 @@ public class BuildingFetcher : MonoBehaviour {
             tris.Add(i + 1);
         }
 
-        // triangulate top (reverse winding)
         int off = n;
         for (int i = 1; i < n - 1; i++) {
             tris.Add(off);
@@ -138,7 +128,6 @@ public class BuildingFetcher : MonoBehaviour {
             tris.Add(off + i);
         }
 
-        // walls
         for (int i = 0; i < n; i++) {
             int next = (i + 1) % n;
 
@@ -147,12 +136,10 @@ public class BuildingFetcher : MonoBehaviour {
             int topA = i + off;
             int topB = next + off;
 
-            // first triangle
             tris.Add(bottomA);
             tris.Add(bottomB);
             tris.Add(topA);
 
-            // second triangle
             tris.Add(topA);
             tris.Add(bottomB);
             tris.Add(topB);
@@ -160,11 +147,9 @@ public class BuildingFetcher : MonoBehaviour {
 
         mesh.triangles = tris.ToArray();
 
-        // normals + bounds are crucial
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
 
-        // optional: simple UVs so material shading behaves
         Vector2[] uvs = new Vector2[verts.Length];
         for (int i = 0; i < verts.Length; i++)
             uvs[i] = new Vector2(verts[i].x, verts[i].z);
@@ -172,11 +157,24 @@ public class BuildingFetcher : MonoBehaviour {
 
         mf.mesh = mesh;
 
-        // Optional: make building pickable / collideable by adding MeshCollider (optional)
-        // var col = building.AddComponent<MeshCollider>();
-        // col.sharedMesh = mesh;
+        Bounds localBounds = mesh.bounds;
+        Bounds worldBounds = new Bounds(building.transform.TransformPoint(localBounds.center), Vector3.Scale(localBounds.size, building.transform.lossyScale));
+        Debug.Log($"BUILDING CREATED: pos={building.transform.position} mesh.bounds.center(local)={localBounds.center} size={localBounds.size} worldBounds.center={worldBounds.center} size={worldBounds.size}");
 
-        Debug.Log("✔ BUILDING CREATED in Unity scene! Centroid: " + centroid);
+        Plane[] planes = GeometryUtility.CalculateFrustumPlanes(arcgisCamera);
+        bool inFrustum = GeometryUtility.TestPlanesAABB(planes, worldBounds);
+        Debug.Log($"Frustum test: inFrustum={inFrustum} camPos={arcgisCamera.transform.position} camForward={arcgisCamera.transform.forward}");
+
+        Debug.DrawLine(arcgisCamera.transform.position, centroid, Color.yellow, 5f);
+        Debug.DrawRay(centroid, Vector3.up * 5f, Color.cyan, 5f);
+
+        if (!inFrustum) {
+            Debug.LogWarning("Building mesh is outside camera frustum.");
+        }
+        var col = building.AddComponent<MeshCollider>();
+        col.sharedMesh = mesh;
+        col.convex = false;
+
+        Debug.Log("BUILDING CREATED in Unity scene! Centroid: " + centroid);
     }
-
 }
