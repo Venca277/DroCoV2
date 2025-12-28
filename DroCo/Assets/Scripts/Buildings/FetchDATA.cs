@@ -11,6 +11,7 @@ public class OSMElement {
     public string type;
     public long id;
     public List<OSMCoord> geometry;
+    public Dictionary<string, string> tags;
 }
 
 [Serializable]

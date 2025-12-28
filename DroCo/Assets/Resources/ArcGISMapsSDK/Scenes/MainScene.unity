@@ -2056,6 +2056,7 @@ GameObject:
   - component: {fileID: 452451341}
   - component: {fileID: 452451340}
   - component: {fileID: 452451339}
+  - component: {fileID: 452451342}
   m_Layer: 0
   m_Name: BuildingSystem
   m_TagString: Untagged
@@ -2090,6 +2091,7 @@ MonoBehaviour:
   arcgisCamera: {fileID: 961739752}
   overpass: {fileID: 452451339}
   map: {fileID: 1192607889}
+  missionGenerator: {fileID: 452451342}
 --- !u!4 &452451341
 Transform:
   m_ObjectHideFlags: 0
@@ -2105,6 +2107,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &452451342
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 452451338}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 73dac1d7153c07843b33df2c5edad7cd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  scanDistance: 3
+  verticalStep: 2.5
+  use3DTubes: 0
+  pathColor: {r: 0, g: 0.34628844, b: 1, a: 1}
+  tubeThickness: 0.2
+  waypointPrefab: {fileID: 0}
+  waypointSize: 0.5
 --- !u!1 &482125277
 GameObject:
   m_ObjectHideFlags: 0
@@ -4265,6 +4286,55 @@ MonoBehaviour:
   MinSpeed: 1000
   PinchSpeed: 0.03
   EnableRotation: 0
+--- !u!1 &923498179
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 923498181}
+  - component: {fileID: 923498180}
+  m_Layer: 0
+  m_Name: Global Volume (1)
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &923498180
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 923498179}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172515602e62fb746b5d573b38a5fe58, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_IsGlobal: 1
+  priority: 0
+  blendDistance: 0
+  weight: 1
+  sharedProfile: {fileID: 11400000, guid: 357197f9fc17b86428327ddc95a46735, type: 2}
+--- !u!4 &923498181
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 923498179}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 94.22069, y: 7.0307336, z: -3.5618496}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &961739749
 GameObject:
   m_ObjectHideFlags: 0
@@ -4633,6 +4703,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 980948408}
+  - component: {fileID: 980948409}
   m_Layer: 0
   m_Name: GeneratedMission
   m_TagString: Untagged
@@ -4655,6 +4726,33 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &980948409
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 980948407}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ea4c056ecab070c43bf3f5e9fb15b826, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_IsInitialized: 1
+  m_LocalPosition:
+    x: 937.0404052734375
+    y: 520.535888671875
+    z: 657.1400756835938
+  m_LocalRotation:
+    value:
+      x: 0
+      y: 0
+      z: 0
+      w: 1
+  m_LocalScale:
+    x: 1
+    y: 1
+    z: 1
 --- !u!1 &981959901
 GameObject:
   m_ObjectHideFlags: 0
@@ -6955,7 +7053,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -390, y: -260}
+  m_AnchoredPosition: {x: 700, y: -260}
   m_SizeDelta: {x: 495, y: 495}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1310280933
@@ -8879,7 +8977,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_RenderShadows: 1
-  m_RequiresDepthTextureOption: 2
+  m_RequiresDepthTextureOption: 1
   m_RequiresOpaqueTextureOption: 2
   m_CameraType: 1
   m_Cameras: []
@@ -12118,3 +12216,4 @@ SceneRoots:
   - {fileID: 2095343336}
   - {fileID: 2085021779}
   - {fileID: 452451341}
+  - {fileID: 923498181}

@@ -1,15 +1,22 @@
 using System.Collections.Generic;
+using System.Globalization;
 using Esri.ArcGISMapsSDK.Components;
+using Esri.ArcGISMapsSDK.Utils.GeoCoord;
 using Esri.GameEngine.Geometry;
 using UnityEngine;
+using System.Globalization;
+using Newtonsoft.Json;
+using System;
 
 public class BuildingFetcher : MonoBehaviour {
     public Camera arcgisCamera;
     public OverpassClient overpass;
     public ArcGISMapComponent map;
+    public MissionGenerator missionGenerator;
 
     private float lastClickTime = 0f;
     private float doubleClickThreshold = 0.25f;
+    private GameObject currentSelection = null;
 
     private void Update() {
         if (Input.GetMouseButtonDown(0)) {
@@ -30,16 +37,25 @@ public class BuildingFetcher : MonoBehaviour {
 
             Debug.Log($"DOUBLE-CLICK GEO: lat={lat}, lon={lon}");
 
-            StartCoroutine(overpass.FetchBuildingData(lat, lon, (json) => {
-                if (json == null) {
-                    Debug.LogError("OSM fetch failed.");
+            StartCoroutine(overpass.FetchBuildingData(lat, lon, (jsonString) => {
+                if (string.IsNullOrEmpty(jsonString)) {
+                    Debug.LogError("OSM fetch failed or empty.");
                     return;
                 }
 
-                Debug.Log("JSON fetched successfully.");
+                // 1. DESERIALIZACE POMOCÍ NEWTONSOFT (místo JsonUtility)
+                OSMRoot root = null;
+                try {
+                    root = JsonConvert.DeserializeObject<OSMRoot>(jsonString);
+                } catch (System.Exception e) {
+                    Debug.LogError($"JSON Parse Error: {e.Message}");
+                    return;
+                }
 
-                OSMRoot root = JsonUtility.FromJson<OSMRoot>(json);
+                if (root == null || root.elements == null)
+                    return;
 
+                // Najdeme nejbližší budovu
                 OSMElement building = OSMBuildingSelector.FindClosestBuilding(root, lat, lon);
 
                 if (building == null) {
@@ -47,134 +63,198 @@ public class BuildingFetcher : MonoBehaviour {
                     return;
                 }
 
-                Debug.Log($"Selected building ID: {building.id} | points: {building.geometry.Count}");
+                Debug.Log($"Selected building ID: {building.id} | Tags found: {building.tags?.Count ?? 0}");
 
-                var unityPoints = OSMToUnity.ConvertPolygonToUnity(building, map, geo.Z);
+                ArcGISPoint hitGeo = map.EngineToGeographic(hit.point);
+                float roofAltitude = (float) hitGeo.Z;
 
-                foreach (var p in unityPoints) {
-                    Debug.Log($"Unity world point: {p}");
-                }
+                // 2. ZÍSKÁNÍ REÁLNÉ VÝŠKY Z TAGŮ
+                float realHeight = GetRealHeight(building);
+                Debug.Log($"Calculated Height: {realHeight}m");
 
-                Debug.Log("Building polygon converted to Unity coordinates.");
-                CreateBuildingMesh(unityPoints);
+                // 3. PŘEVOD BODŮ NA UNITY WORLD
+                var unityPoints = OSMToUnity.ConvertPolygonToUnity(building, map, 0);
+
+                // 4. VYKRESLENÍ MESH
+                CreateBuildingMesh(unityPoints, building, roofAltitude);
             }));
         }
     }
 
-    public void CreateBuildingMesh(List<Vector3> worldPoints) {
-        if (worldPoints == null || worldPoints.Count < 3) {
-            Debug.LogWarning("Polygon too small or null.");
-            return;
+    public void ClearSelection() {
+        if (currentSelection != null) {
+            Destroy(currentSelection);
+            currentSelection = null;
+        }
+        if (missionGenerator != null)
+            missionGenerator.ClearPath();
+    }
+
+    private float GetRealHeight(OSMElement building) {
+        float defaultHeight = 15f; // Bezpečný default
+        float floorHeight = 4.0f;  // Větší patra pro veřejné budovy
+
+        if (building.tags == null)
+            return defaultHeight;
+
+        if (building.tags.TryGetValue("height", out string heightStr)) {
+            heightStr = heightStr.Replace("m", "").Trim();
+            if (float.TryParse(heightStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float h)) {
+                return h;
+            }
         }
 
-        Vector3 centroid = Vector3.zero;
+        if (building.tags.TryGetValue("building:levels", out string levelsStr)) {
+            if (float.TryParse(levelsStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float l)) {
+                // Počet pater * 5m + 1m rezerva na atiku
+                return (l * floorHeight) + 1.0f;
+            }
+        }
+
+        return defaultHeight;
+    }
+
+    public void CreateBuildingMesh(List<Vector3> worldPoints, OSMElement buildingData, float roofAltitudeFromRay) {
+        ClearSelection();
+
+        if (worldPoints == null || worldPoints.Count < 3)
+            return;
+
+        // 1. Centroid (střed budovy PŮDORYSNĚ)
+        // worldPoints jsou na hladině moře (protože jsme je tak převedli v Update), ale to nám nevadí pro X a Z.
+        Vector3 centroidSeaLevel = Vector3.zero;
         foreach (var wp in worldPoints)
-            centroid += wp;
-        centroid /= worldPoints.Count;
+            centroidSeaLevel += wp;
+        centroidSeaLevel /= worldPoints.Count;
 
-        GameObject building = new GameObject("OSM_Building");
-        building.transform.position = centroid;
-        building.layer = 0;
+        // 2. Zjistíme Geo souřadnice středu (Lat/Lon)
+        ArcGISPoint centroidGeo = map.EngineToGeographic(centroidSeaLevel);
 
-        var mf = building.AddComponent<MeshFilter>();
-        var mr = building.AddComponent<MeshRenderer>();
+        // ZMĚNA: Pivot (Střed objektu) přesuneme NA STŘECHU (tam, kam jsme klikli)
+        // Tím zajistíme, že se s objektem bude dobře manipulovat a bude sedět v prostoru.
+        ArcGISPoint pivotGeo = new ArcGISPoint(centroidGeo.X, centroidGeo.Y, roofAltitudeFromRay, centroidGeo.SpatialReference);
+        Vector3 pivotWorldPosition = map.GeographicToEngine(pivotGeo);
 
-        Shader unlit = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Standard");
-        Material mat = new Material(unlit);
-        if (mat.HasProperty("_Surface"))
-            mat.SetFloat("_Surface", 0f);
-        if (mat.HasProperty("_ZWrite"))
-            mat.SetInt("_ZWrite", 1);
-        mat.renderQueue = (int) UnityEngine.Rendering.RenderQueue.Geometry;
-        if (mat.HasProperty("_BaseColor"))
-            mat.SetColor("_BaseColor", new Color(0f, 0.4f, 1f, 1f));
-        else
-            mat.color = new Color(0f, 0.4f, 1f, 1f);
 
+        // --- TVORBA OBJEKTU ---
+        currentSelection = new GameObject($"OSM_Selection_{buildingData.id}");
+        GameObject buildingObj = currentSelection;
+        if (map != null)
+            buildingObj.transform.SetParent(map.transform, true);
+
+        // Nastavíme pozici objektu na STŘECHU
+        buildingObj.transform.position = pivotWorldPosition;
+
+        int layerIndex = LayerMask.NameToLayer("Buildings");
+        buildingObj.layer = (layerIndex != -1) ? layerIndex : 0;
+
+        // ArcGIS Location - kotvíme na STŘEŠE (Altitude = roofAltitudeFromRay)
+        var locationComponent = buildingObj.AddComponent<ArcGISLocationComponent>();
+        locationComponent.Position = pivotGeo;
+        locationComponent.Rotation = new ArcGISRotation(0, 90, 0);
+        locationComponent.enabled = true;
+
+        var mf = buildingObj.AddComponent<MeshFilter>();
+        var mr = buildingObj.AddComponent<MeshRenderer>();
+
+        // --- MATERIÁL (ZELENÝ HOLOGRAM) ---
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (!shader)
+            shader = Shader.Find("Universal Render Pipeline/Unlit");
+
+        Material mat = new Material(shader);
+        mat.SetColor("_BaseColor", new Color(0f, 1f, 0f, 0.05f));
+        mat.SetFloat("_Smoothness", 0.0f);
+        mat.EnableKeyword("_EMISSION");
+        mat.SetColor("_EmissionColor", new Color(0f, 1f, 0f) * 3.0f); // Intenzita 3
+
+        mat.SetFloat("_Surface", 1);
+        mat.SetFloat("_Blend", 0);
+        mat.SetInt("_SrcBlend", (int) UnityEngine.Rendering.BlendMode.One);
+        mat.SetInt("_DstBlend", (int) UnityEngine.Rendering.BlendMode.One);
+        mat.SetFloat("_ZWrite", 0);
+        mat.renderQueue = (int) UnityEngine.Rendering.RenderQueue.Transparent;
+        mat.SetFloat("_Cull", (float) UnityEngine.Rendering.CullMode.Off);
+        mat.SetInt("_ZTest", (int) UnityEngine.Rendering.CompareFunction.LessEqual);
         mr.material = mat;
-        mr.material.renderQueue = 4000;
-        if (mr.material.HasProperty("_ZTest")) mr.material.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        mr.receiveShadows = false;
-        mr.allowOcclusionWhenDynamic = false;
 
+        // --- MESH GENERACE ---
         Mesh mesh = new Mesh();
-        mesh.name = "OSM_Building_Mesh";
-
-        int n = worldPoints.Count;
-        if (n * 2 > 65000)
+        if (worldPoints.Count * 2 > 65000)
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-
+        int n = worldPoints.Count;
         Vector3[] verts = new Vector3[n * 2];
+
+        // ZMĚNA VÝŠKY:
+        // Protože Pivot (0,0,0 lokálně) je na STŘEŠE:
+        // Top = 0.5m nad střechu.
+        // Bottom = -Height pod střechu.
+
+        float osmHeight = GetRealHeight(buildingData);
+
+        // Pojistka: Pokud OSM neví výšku (vrací default), dáme tam raději fixních 15m, 
+        // aby to nevypadalo jako malá placka.
+        // Zvýšíme trochu výšku pater, pro školy je 3.5m málo.
+        if (osmHeight < 5f)
+            osmHeight = 15f;
+
+        float topY = 0.5f;
+        float bottomY = -osmHeight; // Stavíme dolů do hloubky
+        float inflation = 0.1f;
+
         for (int i = 0; i < n; i++) {
-            Vector3 local = worldPoints[i] - centroid;
-            verts[i] = local;
-            verts[i + n] = local + new Vector3(0, 8f, 0);
+            // worldPoints jsou na moři, pivot je na střeše.
+            // Musíme vypočítat horizontální posun (X, Z) bez ohledu na výšku.
+            // Protože Unity Y je nahoru, rozdíl worldPoints[i] - centroidSeaLevel nám dá správné X/Z offsety.
+            Vector3 offset = worldPoints[i] - centroidSeaLevel;
+
+            Vector3 local = new Vector3(offset.x, 0, offset.z); // Y ignorujeme, řešíme ho přes topY/bottomY
+            Vector3 dir = local.normalized;
+            Vector3 inflated = local + (dir * inflation);
+
+            verts[i] = new Vector3(inflated.x, bottomY, inflated.z);
+            verts[i + n] = new Vector3(inflated.x, topY, inflated.z);
         }
 
         mesh.vertices = verts;
 
         List<int> tris = new List<int>();
-        for (int i = 1; i < n - 1; i++) {
-            tris.Add(0);
-            tris.Add(i);
-            tris.Add(i + 1);
-        }
-
         int off = n;
+        // Střecha
         for (int i = 1; i < n - 1; i++) {
             tris.Add(off);
-            tris.Add(off + i + 1);
             tris.Add(off + i);
+            tris.Add(off + i + 1);
         }
-
+        // Stěny
         for (int i = 0; i < n; i++) {
             int next = (i + 1) % n;
-
-            int bottomA = i;
-            int bottomB = next;
-            int topA = i + off;
-            int topB = next + off;
-
-            tris.Add(bottomA);
-            tris.Add(bottomB);
-            tris.Add(topA);
-
-            tris.Add(topA);
-            tris.Add(bottomB);
-            tris.Add(topB);
+            tris.Add(i);
+            tris.Add(i + off);
+            tris.Add(next);
+            tris.Add(next);
+            tris.Add(i + off);
+            tris.Add(next + off);
+            tris.Add(next);
+            tris.Add(i + off);
+            tris.Add(i);
+            tris.Add(next + off);
+            tris.Add(i + off);
+            tris.Add(next);
         }
 
         mesh.triangles = tris.ToArray();
-
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
-
-        Vector2[] uvs = new Vector2[verts.Length];
-        for (int i = 0; i < verts.Length; i++)
-            uvs[i] = new Vector2(verts[i].x, verts[i].z);
-        mesh.uv = uvs;
-
         mf.mesh = mesh;
 
-        Bounds localBounds = mesh.bounds;
-        Bounds worldBounds = new Bounds(building.transform.TransformPoint(localBounds.center), Vector3.Scale(localBounds.size, building.transform.lossyScale));
-        Debug.Log($"BUILDING CREATED: pos={building.transform.position} mesh.bounds.center(local)={localBounds.center} size={localBounds.size} worldBounds.center={worldBounds.center} size={worldBounds.size}");
-
-        Plane[] planes = GeometryUtility.CalculateFrustumPlanes(arcgisCamera);
-        bool inFrustum = GeometryUtility.TestPlanesAABB(planes, worldBounds);
-        Debug.Log($"Frustum test: inFrustum={inFrustum} camPos={arcgisCamera.transform.position} camForward={arcgisCamera.transform.forward}");
-
-        Debug.DrawLine(arcgisCamera.transform.position, centroid, Color.yellow, 5f);
-        Debug.DrawRay(centroid, Vector3.up * 5f, Color.cyan, 5f);
-
-        if (!inFrustum) {
-            Debug.LogWarning("Building mesh is outside camera frustum.");
-        }
-        var col = building.AddComponent<MeshCollider>();
+        var col = buildingObj.AddComponent<MeshCollider>();
         col.sharedMesh = mesh;
-        col.convex = false;
 
-        Debug.Log("BUILDING CREATED in Unity scene! Centroid: " + centroid);
+        if (missionGenerator != null) {
+            // Musíme poslat worldPoints (půdorys), které už máme v této funkci k dispozici
+            missionGenerator.GenerateScanPath(buildingObj, worldPoints);
+        }
     }
 }
