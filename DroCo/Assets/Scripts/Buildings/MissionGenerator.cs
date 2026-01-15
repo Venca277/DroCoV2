@@ -1,7 +1,20 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Esri.ArcGISMapsSDK.Components; // Nutné pro práci s mapou
+using Esri.GameEngine.Geometry;       // Nutné pro ArcGISPoint
+
+// Pomocná třída pro GPS souřadnice, kterou budeme posílat dronu
+[System.Serializable]
+public class GPSWaypoint {
+    public double latitude;
+    public double longitude;
+    public double altitude;
+}
 
 public class MissionGenerator : MonoBehaviour {
+
+    [Header("ArcGIS Reference")]
+    public ArcGISMapComponent mapComponent; // SEM PŘETÁHNĚTE OBJEKT "Map" Z HIERARCHY!
 
     [Header("Parametry letu")]
     [Tooltip("Vzdálenost od stěny budovy (metry)")]
@@ -11,32 +24,26 @@ public class MissionGenerator : MonoBehaviour {
     public float verticalStep = 1.5f;
 
     [Header("Vzhled Trubky")]
-    public bool use3DTubes = true; // Pokud false, použije se jen obyčejná čára
+    public bool use3DTubes = true;
     public Color pathColor = Color.blue;
-    public float tubeThickness = 0.2f; // Tloušťka trubky
+    public float tubeThickness = 0.2f;
 
     [Header("Waypointy")]
-    [Tooltip("Zde přetáhněte prefab kuličky (nebo nechte prázdné)")]
     public GameObject waypointPrefab;
     public float waypointSize = 0.3f;
 
     // Interní
     private LineRenderer lineRenderer;
-    // Seznam všech vytvořených objektů (kuličky i trubky), abychom je mohli smazat
     private List<GameObject> spawnedObjects = new List<GameObject>();
 
     void Awake() {
-        // LineRenderer si necháme jako zálohu nebo pro "vnitřek" trubky
         lineRenderer = GetComponent<LineRenderer>();
-        if (lineRenderer == null) {
+        if (lineRenderer == null)
             lineRenderer = gameObject.AddComponent<LineRenderer>();
-        }
 
-        // Vrstva
         int layerIndex = LayerMask.NameToLayer("Buildings");
         gameObject.layer = (layerIndex != -1) ? layerIndex : 0;
 
-        // Nastavení LineRendereru (pro jistotu)
         lineRenderer.startWidth = tubeThickness;
         lineRenderer.endWidth = tubeThickness;
         lineRenderer.useWorldSpace = true;
@@ -50,11 +57,14 @@ public class MissionGenerator : MonoBehaviour {
         lineRenderer.material = mat;
     }
 
-    public void GenerateScanPath(GameObject buildingObj, List<Vector3> footprintPoints) {
-        ClearPath(); // Smazat staré
+    /// <summary>
+    /// Hlavní funkce: Vygeneruje trasu, vykreslí ji v Unity a vrátí body ve World Space
+    /// </summary>
+    public List<Vector3> GenerateScanPath(GameObject buildingObj, List<Vector3> footprintPoints) {
+        ClearPath();
 
         if (buildingObj == null || footprintPoints == null || footprintPoints.Count < 3)
-            return;
+            return new List<Vector3>();
 
         Bounds bounds = buildingObj.GetComponent<Collider>().bounds;
         float startY = bounds.min.y + 2.0f;
@@ -95,102 +105,103 @@ public class MissionGenerator : MonoBehaviour {
             currentY += verticalStep;
         }
 
-        // 3. Vykreslení (Trubky a Waypointy)
-        if (finalPath.Count > 0) {
+        // 3. Vykreslení
+        VisualizePath(finalPath);
 
-            // A) LineRenderer (rychlý náhled)
-            lineRenderer.positionCount = finalPath.Count;
-            lineRenderer.SetPositions(finalPath.ToArray());
+        // Vrátíme Unity souřadnice, aby je Controller mohl převést
+        return finalPath;
+    }
 
-            // B) 3D Trubky a Waypointy
-            for (int i = 0; i < finalPath.Count; i++) {
-                Vector3 currentPos = finalPath[i];
+    /// <summary>
+    /// Převede Unity Vector3 body na reálné GPS (Lat/Lon/Alt)
+    /// </summary>
+    public List<GPSWaypoint> ConvertToGPSCoordinates(List<Vector3> unityPath) {
+        List<GPSWaypoint> gpsPath = new List<GPSWaypoint>();
 
-                // 1. Vytvořit Waypoint (Kuličku)
-                CreateWaypointMarker(currentPos, i);
+        if (mapComponent == null) {
+            Debug.LogError("MissionGenerator: Není přiřazena ArcGIS Map Component! Nelze převádět souřadnice.");
+            return gpsPath;
+        }
 
-                // 2. Vytvořit Trubku k dalšímu bodu (pokud existuje)
-                if (use3DTubes && i < finalPath.Count - 1) {
-                    Vector3 nextPos = finalPath[i + 1];
-                    CreateTubeSegment(currentPos, nextPos);
-                }
+        foreach (var point in unityPath) {
+            // SDK funkce pro převod: Engine (Unity) -> Geographic (GPS)
+            ArcGISPoint geoPos = mapComponent.EngineToGeographic(point);
+
+            GPSWaypoint wp = new GPSWaypoint();
+            wp.latitude = geoPos.Y;  // Y je Latitude
+            wp.longitude = geoPos.X; // X je Longitude
+            wp.altitude = geoPos.Z;  // Z je Altitude
+
+            gpsPath.Add(wp);
+        }
+
+        return gpsPath;
+    }
+
+    // Samostatná funkce pro vizualizaci (abychom ji mohli volat i z Controlleru)
+    public void VisualizePath(List<Vector3> path) {
+        if (path.Count == 0)
+            return;
+
+        lineRenderer.positionCount = path.Count;
+        lineRenderer.SetPositions(path.ToArray());
+
+        for (int i = 0; i < path.Count; i++) {
+            Vector3 currentPos = path[i];
+            CreateWaypointMarker(currentPos, i);
+            if (use3DTubes && i < path.Count - 1) {
+                CreateTubeSegment(currentPos, path[i + 1]);
             }
         }
     }
 
-    // --- TVORBA WAYPOINTU ---
     private void CreateWaypointMarker(Vector3 pos, int index) {
         GameObject wpObj;
-
-        // Pokud máme Prefab, použijeme ho
         if (waypointPrefab != null) {
             wpObj = Instantiate(waypointPrefab, pos, Quaternion.identity);
         } else {
-            // Jinak vytvoříme primitivní kouli
             wpObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            // Obarvíme ji
             var renderer = wpObj.GetComponent<MeshRenderer>();
             Shader shader = Shader.Find("Universal Render Pipeline/Lit");
             if (!shader)
                 shader = Shader.Find("Standard");
-
             Material mat = new Material(shader);
-            mat.color = Color.yellow; // Defaultní barva pokud není prefab
+            mat.color = Color.yellow;
             renderer.material = mat;
         }
-
         wpObj.name = $"WP_{index}";
         wpObj.transform.position = pos;
         wpObj.transform.localScale = Vector3.one * waypointSize;
-
-        // Nastavení vrstvy
         int layerIndex = LayerMask.NameToLayer("Buildings");
         wpObj.layer = (layerIndex != -1) ? layerIndex : 0;
-
         spawnedObjects.Add(wpObj);
     }
 
-    // --- TVORBA TRUBKY (VÁLCE) ---
     private void CreateTubeSegment(Vector3 start, Vector3 end) {
         GameObject tube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         tube.name = "Tube_Segment";
-
-        // Vrstva
         int layerIndex = LayerMask.NameToLayer("Buildings");
         tube.layer = (layerIndex != -1) ? layerIndex : 0;
-
-        // Materiál trubky
         var renderer = tube.GetComponent<MeshRenderer>();
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
         if (!shader)
             shader = Shader.Find("Standard");
         Material mat = new Material(shader);
         mat.color = pathColor;
-        // Můžeme přidat trochu lesku
         mat.SetFloat("_Smoothness", 0.5f);
         renderer.material = mat;
 
-        // MATEMATIKA: Napozicovat válec mezi dva body
         Vector3 centerPos = (start + end) / 2f;
         float distance = Vector3.Distance(start, end);
-
         tube.transform.position = centerPos;
         tube.transform.LookAt(end);
-
-        // Otočit, protože Unity Cylinder má výšku na ose Y, ale LookAt míří osou Z
         tube.transform.Rotate(90, 0, 0);
-
-        // Změnit velikost (Scale)
-        // Y je výška válce (defaultně 2 metry), takže musíme dělit 2
         tube.transform.localScale = new Vector3(tubeThickness, distance / 2f, tubeThickness);
-
         spawnedObjects.Add(tube);
     }
 
     public void ClearPath() {
         lineRenderer.positionCount = 0;
-
-        // Smažeme všechny vygenerované objekty
         foreach (var obj in spawnedObjects) {
             if (obj != null)
                 Destroy(obj);

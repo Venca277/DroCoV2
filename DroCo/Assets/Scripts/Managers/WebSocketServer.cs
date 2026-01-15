@@ -240,6 +240,23 @@ public class WebSocketServer : Singleton<WebSocketServer> {
 
     }
 
+    public void BroadcastToAll(string jsonMessage) {
+        if (Server != null && Server.IsListening) {
+            // Získáme službu na cestě "/" (tam, kde běží WebSocketServerBehavior)
+            // Pokud by to nefungovalo, zkontrolujte v StartServer(), jakou cestu používáte (zde předpokládám "/")
+            var service = Server.WebSocketServices["/"];
+
+            if (service != null) {
+                Debug.Log($"Broadcasting message to {service.Sessions.Count} clients.");
+                service.Sessions.Broadcast(jsonMessage);
+            } else {
+                Debug.LogError("Služba na cestě '/' nebyla nalezena!");
+            }
+        } else {
+            Debug.LogWarning("Server neběží, nelze odeslat broadcast.");
+        }
+    }
+
     private void OnApplicationQuit() {
         if (Server != null) {
             Server.Stop();
