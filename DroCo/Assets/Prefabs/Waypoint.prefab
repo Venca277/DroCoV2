@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 2549141100097020553}
   - component: {fileID: 2351605112464840252}
   - component: {fileID: 6144840802761148908}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Cylinder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -95,7 +95,7 @@ GameObject:
   - component: {fileID: 3993616020532702921}
   - component: {fileID: 3993616020532702920}
   - component: {fileID: 3993616020532702919}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Sphere
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -199,7 +199,8 @@ GameObject:
   m_Component:
   - component: {fileID: 3993616021649011767}
   - component: {fileID: 4252546472027516582}
-  m_Layer: 12
+  - component: {fileID: -5157371367622469299}
+  m_Layer: 10
   m_Name: Waypoint
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -239,6 +240,20 @@ MonoBehaviour:
   connectionBinder: {fileID: 7233095063235088319}
   text: {fileID: 1953573984177033371}
   shadow: {fileID: 6682731881208272609}
+--- !u!114 &-5157371367622469299
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3993616021649011766}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4050c6ad84625f14c88793baa4c4fe0c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  originalColor: {r: 0.99729896, g: 1, b: 0, a: 0}
+  selectedColor: {r: 0.12231743, g: 1, b: 0, a: 1}
 --- !u!1 &4646414019440636554
 GameObject:
   m_ObjectHideFlags: 0
@@ -248,7 +263,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7233095063235088319}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: ConnectionBinder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -285,7 +300,7 @@ GameObject:
   - component: {fileID: 1912838034323266009}
   - component: {fileID: 8470833709521795428}
   - component: {fileID: 1953573984177033371}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Text (TMP)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -454,7 +469,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6619417502351014693}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Shadow
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -488,7 +503,7 @@ GameObject:
   m_Component:
   - component: {fileID: 613461493501440660}
   - component: {fileID: 2135860592240970276}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Text
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -535,7 +550,7 @@ GameObject:
   - component: {fileID: 5659607071136398961}
   - component: {fileID: 6199767637557896471}
   - component: {fileID: 1711110295014710543}
-  m_Layer: 12
+  m_Layer: 10
   m_Name: Sphere
   m_TagString: Untagged
   m_Icon: {fileID: 0}

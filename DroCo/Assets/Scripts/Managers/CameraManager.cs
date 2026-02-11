@@ -21,7 +21,9 @@ public class CameraManager : Singleton<CameraManager> {
     private ArcGISCameraControllerTouch cameraControllerTouch;
     private CameraFollowSimple cameraFollow;
 
-    public bool FollowingTarget { get; private set; }
+    public bool FollowingTarget {
+        get; private set;
+    }
 
     private float pinchSpeed = 0.03f;
 
@@ -65,7 +67,7 @@ public class CameraManager : Singleton<CameraManager> {
                 //    SetCameraView(CameraView.ThirdPerson);
             } else if (Keyboard.current[Key.Numpad3].wasPressedThisFrame) {
                 SetCameraView(CameraView.FreeLook);
-            } 
+            }
         }
     }
 

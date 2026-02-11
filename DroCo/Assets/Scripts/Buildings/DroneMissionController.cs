@@ -25,32 +25,34 @@ public class DroneMissionController : MonoBehaviour {
     public float paramMinHeight = 10f;
     public float paramOverlap = 0.5f;
 
-    public void ProcessMission(GameObject building, List<Vector3> footprint) {
-        Debug.Log("--- ZAČÍNÁM PLÁNOVAT MISI ---");
+    public MissionData currentMission;
 
-        // 1. Vygenerovat spirálu (Unity metry)
+    public void ProcessMission(GameObject building, List<Vector3> footprint) {
+        Debug.Log("--- MISSION PLANNING ---");
+
+        //generate path
         List<Vector3> rawHelixUnity = generator.GenerateScanPath(building, footprint);
 
         if (rawHelixUnity == null || rawHelixUnity.Count == 0) {
-            Debug.LogError("Chyba: Generátor nevrátil žádnou trasu!");
+            Debug.LogError("Error: Generator returned no path!");
             return;
         }
 
-        // 2. Převést na GPS (Lat/Lon/Alt) - vrací nám to pomocnou třídu z minula,
-        // kterou teď převedeme do VAŠÍ struktury Point.
+        //converting to gps coords
+        //put in point structure
         List<GPSWaypoint> gpsHelix = generator.ConvertToGPSCoordinates(rawHelixUnity);
 
-        // 3. Naplnění VAŠÍ existující struktury MissionData
+        //put in complex structure
         MissionData complexMission = new MissionData();
         complexMission.route = new Route();
         complexMission.route.name = "Generated Helix Scan";
         complexMission.route.segments = new List<Segment>();
 
-        // Vytvoříme jeden segment pro celou spirálu
+        //one mission segment
         Segment scanSegment = new Segment();
-        scanSegment.type = "scan"; // Nebo jakýkoliv typ používáte
+        scanSegment.type = "scan"; //whatever type we want to use
 
-        // Nastavení parametrů
+        //parameters
         scanSegment.parameters = new Parameters();
         scanSegment.parameters.maxHeight = paramMaxHeight;
         scanSegment.parameters.minHeight = paramMinHeight;
@@ -59,26 +61,74 @@ public class DroneMissionController : MonoBehaviour {
         scanSegment.parameters.scanDistance = generator.scanDistance;
         scanSegment.parameters.scanPattern = "Helix";
 
-        // Naplnění bodů
+        //multipoint segment
         scanSegment.multipoint = new MultiPoint();
         scanSegment.multipoint.points = new List<Point>();
 
-        // A) Přidat Start
+        //add start to path
         AddPointToSegment(scanSegment, startLat, startLon, startAlt);
 
-        // B) Přidat Spirálu
+        //then we add the generated points
         foreach (var wp in gpsHelix) {
             AddPointToSegment(scanSegment, wp.latitude, wp.longitude, wp.altitude);
         }
 
-        // C) Přidat Návrat
+        //add end to path
         AddPointToSegment(scanSegment, startLat, startLon, startAlt);
 
-        // Přidáme segment do trasy
+        //finalize mission structure
         complexMission.route.segments.Add(scanSegment);
 
-        // 4. Odeslání
-        SendMissionToNetwork(complexMission);
+        //sending over network
+        //SendMissionToNetwork(complexMission);
+        currentMission = complexMission;
+    }
+
+    private void UpdateMissionFromWaypoints() {
+        GameObject[] allobjs = FindObjectsOfType<GameObject>();
+        List<GameObject> allwps = new List<GameObject>();
+
+        foreach (GameObject obj in allobjs) {
+            if (obj.name.StartsWith("WP_")) {
+                allwps.Add(obj);
+            }
+        }
+
+        //sort with names
+        allwps.Sort((a, b) => {
+            int numA = int.Parse(a.name.Replace("WP_", ""));
+            int numB = int.Parse(b.name.Replace("WP_", ""));
+            return numA.CompareTo(numB);
+        });
+
+        //list of positions
+        List<Vector3> updatedPath = new List<Vector3>();
+        foreach (GameObject wp in allwps) {
+            updatedPath.Add(wp.transform.position);
+        }
+
+        //gps conversion
+        List<GPSWaypoint> updatedGPS = generator.ConvertToGPSCoordinates(updatedPath);
+
+        //back to currmission
+        currentMission.route.segments[0].multipoint.points.Clear();
+
+        AddPointToSegment(currentMission.route.segments[0], startLat, startLon, startAlt);
+
+        foreach (GPSWaypoint gps in updatedGPS) {
+            AddPointToSegment(currentMission.route.segments[0], gps.latitude, gps.longitude, gps.altitude);
+        }
+
+        AddPointToSegment(currentMission.route.segments[0], startLat, startLon, startAlt);
+    }
+
+    public void MissionStart() {
+        if (currentMission != null) {
+            UpdateMissionFromWaypoints();
+            SendMissionToNetwork(currentMission);
+        } else {
+            Debug.LogError("No mission ready to start. Try selecting a building first.");
+        }
     }
 
     // Pomocná funkce pro převod do vaší třídy Point

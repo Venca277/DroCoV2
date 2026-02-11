@@ -37,9 +37,11 @@ public class MissionManager : Singleton<MissionManager> {
     private List<Waypoint> missionWaypoints = new List<Waypoint>();
     //private List<MissionSegment> missionSegments = new List<MissionSegment>();
 
+    public bool HasActiveMission => missionWaypoints != null && missionWaypoints.Count > 0;
+
 
     private void Start() {
-        
+
     }
 
     private void Update() {
@@ -68,7 +70,7 @@ public class MissionManager : Singleton<MissionManager> {
     }
 
     public IEnumerator DownloadMissionJson(string url = "https://nextcloud.fit.vutbr.cz/s/R298KkbkCFPWGJF/download/AR_test.json") {
-    //public IEnumerator DownloadMissionJson(string url = "https://nextcloud.fit.vutbr.cz/s/jqbaR6aC54Hp5sY/download/AR_test_short.json") {
+        //public IEnumerator DownloadMissionJson(string url = "https://nextcloud.fit.vutbr.cz/s/jqbaR6aC54Hp5sY/download/AR_test_short.json") {
         UnityWebRequest www;
 
         Debug.Log("DOWNLOADING MISSION");
@@ -171,7 +173,7 @@ public class MissionManager : Singleton<MissionManager> {
                 ArcGISPoint pointA = new ArcGISPoint(line.WaypointA.Coordinates.longitude, line.WaypointA.Coordinates.latitude, line.WaypointA.Altitude, new ArcGISSpatialReference(4326));
                 ArcGISPoint pointB = new ArcGISPoint(line.WaypointB.Coordinates.longitude, line.WaypointB.Coordinates.latitude, line.WaypointB.Altitude, new ArcGISSpatialReference(4326));
                 double distance = CalculateDistance(pointA, pointB);
-                int numberOfSteps = (int) distance / stepSize;                
+                int numberOfSteps = (int) distance / stepSize;
 
                 double startingOffset = CalculateStartingOffset(distance, ref numberOfSteps, stepSize);
 
@@ -192,7 +194,7 @@ public class MissionManager : Singleton<MissionManager> {
 
 
     private void GenerateWaypointsAlongLine(ArcGISPoint pointA, ArcGISPoint pointB, double startingOffset, int numberOfSteps, double distance, int stepSize, Parameters parameters, ref PointDirection firstPoint, List<WaypointGameObject> waypoints) {
-        
+
         for (int i = 0; i <= numberOfSteps; i++) {
             double fraction = (startingOffset + i * stepSize) / distance;
             double latitude = Mathf.Lerp((float) pointA.Y, (float) pointB.Y, (float) fraction);
@@ -306,7 +308,7 @@ public class MissionManager : Singleton<MissionManager> {
     private void SpawnMission() {
         WaypointGameObject previousWaypoint = null;
         int i = 0;
-        foreach(Waypoint waypoint in missionWaypoints) {
+        foreach (Waypoint waypoint in missionWaypoints) {
             GameObject point = Instantiate(WaypointPrefab, GameManager.Instance.Scene3DView.transform);
             ArcGISLocationComponent pointLocation = point.AddComponent<ArcGISLocationComponent>();
             pointLocation.Position = new ArcGISPoint(waypoint.Coordinates.longitude, waypoint.Coordinates.latitude, waypoint.Altitude, new ArcGISSpatialReference(4326));

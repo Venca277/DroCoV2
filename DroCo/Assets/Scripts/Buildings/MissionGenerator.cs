@@ -143,8 +143,12 @@ public class MissionGenerator : MonoBehaviour {
         if (path.Count == 0)
             return;
 
-        lineRenderer.positionCount = path.Count;
-        lineRenderer.SetPositions(path.ToArray());
+        if (use3DTubes)
+            lineRenderer.enabled = false;
+        else {
+            lineRenderer.positionCount = path.Count;
+            lineRenderer.SetPositions(path.ToArray());
+        }
 
         for (int i = 0; i < path.Count; i++) {
             Vector3 currentPos = path[i];
@@ -172,7 +176,7 @@ public class MissionGenerator : MonoBehaviour {
         wpObj.name = $"WP_{index}";
         wpObj.transform.position = pos;
         wpObj.transform.localScale = Vector3.one * waypointSize;
-        int layerIndex = LayerMask.NameToLayer("Buildings");
+        int layerIndex = LayerMask.NameToLayer("Mission");
         wpObj.layer = (layerIndex != -1) ? layerIndex : 0;
         spawnedObjects.Add(wpObj);
     }
@@ -180,7 +184,15 @@ public class MissionGenerator : MonoBehaviour {
     private void CreateTubeSegment(Vector3 start, Vector3 end) {
         GameObject tube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         tube.name = "Tube_Segment";
-        int layerIndex = LayerMask.NameToLayer("Buildings");
+        Collider col = tube.GetComponent<Collider>();
+        if (col != null) {
+            col.enabled = true;
+            col.isTrigger = false;
+        } else {
+            Debug.LogWarning("Tube nemá collider!");
+        }
+
+        int layerIndex = LayerMask.NameToLayer("Mission");
         tube.layer = (layerIndex != -1) ? layerIndex : 0;
         var renderer = tube.GetComponent<MeshRenderer>();
         Shader shader = Shader.Find("Universal Render Pipeline/Lit");
@@ -207,5 +219,9 @@ public class MissionGenerator : MonoBehaviour {
                 Destroy(obj);
         }
         spawnedObjects.Clear();
+    }
+
+    public bool HasMission() {
+        return spawnedObjects.Count > 0;
     }
 }

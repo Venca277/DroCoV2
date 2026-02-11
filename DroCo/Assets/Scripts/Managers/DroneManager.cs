@@ -72,6 +72,13 @@ public class DroneManager : Singleton<DroneManager> {
         GameObject newDroneGameObj = Instantiate(DronePrefab, Scene3DView);
         Drone newDrone = newDroneGameObj.GetComponent<Drone>();
         newDrone.InitDrone(dsd);
+
+        //modified by xsovakv00 - 2.2 2026 - turn off drone AR canvas at start
+        if (newDrone.VideoScreen != null) {
+            newDrone.VideoScreen.gameObject.SetActive(false);
+        }
+        //end modified
+
         Drones.Add(dsd.client_id, newDrone);
 
         // Init drone's UI

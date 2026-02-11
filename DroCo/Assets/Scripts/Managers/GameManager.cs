@@ -48,6 +48,9 @@ public class GameManager : Singleton<GameManager> {
     public ArcGISCameraComponent MinimapCamera;
     public GameObject Scene3DView;
 
+    [SerializeField]
+    private MissionGenerator missionGenerator;
+
     private bool carDetectorRunning = false;
 
     private bool mapCentered = false;
@@ -206,6 +209,12 @@ public class GameManager : Singleton<GameManager> {
     }
 
     public void CenterMap(DroneFlightData flightData) {
+        //modified - xsovakv00 11.2. 2026 - centering map after drone connects messes up with mission waypoints recalculation
+        if (missionGenerator != null && missionGenerator.HasMission()) {
+            //Debug.Log("mission exists wont center");
+            return;
+        }
+
         if (!mapCentered) {
             mapCentered = true;
             firstDroneFlightData = flightData;
@@ -278,8 +287,8 @@ public class GameManager : Singleton<GameManager> {
     }
 
     private ArcGISLayer IsLayerInMap(string layerData) {
-        ArcGISMap map = Scene3DViewArcGISMap.View.Map;        
-        int i_max = (int)map.Layers.GetSize();
+        ArcGISMap map = Scene3DViewArcGISMap.View.Map;
+        int i_max = (int) map.Layers.GetSize();
         for (int i = 0; i < i_max; i++) {
             ArcGISLayer layer = map.Layers.At((ulong) i);
 

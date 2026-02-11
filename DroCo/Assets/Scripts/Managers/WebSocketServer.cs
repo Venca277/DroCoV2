@@ -77,8 +77,11 @@ public class WebSocketServerBehavior : WebSocketBehavior {
         } else if (handshake_done && msg.type == "data_broadcast") {
 
             Message<DroneFlightData> dfd = JsonUtility.FromJson<Message<DroneFlightData>>(e.Data);
-            
+
             UnityMainThreadDispatcher.Instance().Enqueue(UpdateDroneFlightData(dfd.data));
+        } else if (handshake_done && msg.type == "status_update") {
+            Message<DroneStatusData> status = JsonUtility.FromJson<Message<DroneStatusData>>(e.Data);
+            UnityMainThreadDispatcher.Instance().Enqueue(HandleStatusUpdate(status.data));
         } else {
             Debug.LogError("Unknown data received! " + e.Data);
         }
@@ -140,6 +143,11 @@ public class WebSocketServerBehavior : WebSocketBehavior {
         DroneManager.Instance.HandleReceivedDroneData(flightData);
         yield return null;
     }
+
+    private IEnumerator HandleStatusUpdate(DroneStatusData statusData) {
+        yield return null;
+    }
+
 }
 
 public class WebSocketServer : Singleton<WebSocketServer> {

@@ -4,6 +4,7 @@ using Esri.ArcGISMapsSDK.Components;
 using Esri.ArcGISMapsSDK.Utils.GeoCoord;
 using Esri.GameEngine.Geometry;
 using UnityEngine;
+using UnityEngine.UI;
 using System.Globalization;
 using Newtonsoft.Json;
 using System;
@@ -14,24 +15,38 @@ public class BuildingFetcher : MonoBehaviour {
     public ArcGISMapComponent map;
     public MissionGenerator missionGenerator;
     public DroneMissionController missionController;
+    public Button launchMissionButton;
 
     private float lastClickTime = 0f;
     private float doubleClickThreshold = 0.25f;
     private GameObject currentSelection = null;
 
+    private GameObject buildingObjectReady = null;
+    private List<Vector3> buildingWorldPoints = null;
+
+    private void Awake() {
+        if (launchMissionButton != null) {
+            launchMissionButton.interactable = false;
+        }
+    }
+
     private void Update() {
+        //double click detection
         if (Input.GetMouseButtonDown(0)) {
             float timeSinceLastClick = Time.time - lastClickTime;
             lastClickTime = Time.time;
 
+            //threshold check
             if (timeSinceLastClick > doubleClickThreshold)
                 return;
 
+            //send ray
             Ray ray = arcgisCamera.ScreenPointToRay(Input.mousePosition);
 
             if (!Physics.Raycast(ray, out RaycastHit hit, 1000f))
                 return;
 
+            //convert to geocoordinates
             ArcGISPoint geo = map.EngineToGeographic(hit.point);
             double lat = geo.Y;
             double lon = geo.X;
@@ -44,7 +59,7 @@ public class BuildingFetcher : MonoBehaviour {
                     return;
                 }
 
-                // 1. DESERIALIZACE POMOCÍ NEWTONSOFT (místo JsonUtility)
+                //json deserialize 
                 OSMRoot root = null;
                 try {
                     root = JsonConvert.DeserializeObject<OSMRoot>(jsonString);
@@ -56,7 +71,7 @@ public class BuildingFetcher : MonoBehaviour {
                 if (root == null || root.elements == null)
                     return;
 
-                // Najdeme nejbližší budovu
+                //elements json object of the closest building
                 OSMElement building = OSMBuildingSelector.FindClosestBuilding(root, lat, lon);
 
                 if (building == null) {
@@ -66,18 +81,19 @@ public class BuildingFetcher : MonoBehaviour {
 
                 Debug.Log($"Selected building ID: {building.id} | Tags found: {building.tags?.Count ?? 0}");
 
+                //extract the Z value of user click
                 ArcGISPoint hitGeo = map.EngineToGeographic(hit.point);
                 float roofAltitude = (float) hitGeo.Z;
 
-                // 2. ZÍSKÁNÍ REÁLNÉ VÝŠKY Z TAGŮ
+                //extract building height from OSM data if present or calculable
                 float realHeight = GetRealHeight(building);
                 Debug.Log($"Calculated Height: {realHeight}m");
 
-                // 3. PŘEVOD BODŮ NA UNITY WORLD
-                var unityPoints = OSMToUnity.ConvertPolygonToUnity(building, map, 0);
+                //recalculating world point to relative unity coordinates
+                var unityRel = OSMToUnity.ConvertPolygonToUnity(building, map, 0);
 
-                // 4. VYKRESLENÍ MESH
-                CreateBuildingMesh(unityPoints, building, roofAltitude);
+                //reconstruction of unity building object
+                CreateBuildingMesh(unityRel, building, roofAltitude);
             }));
         }
     }
@@ -92,12 +108,17 @@ public class BuildingFetcher : MonoBehaviour {
     }
 
     private float GetRealHeight(OSMElement building) {
-        float defaultHeight = 15f; // Bezpečný default
-        float floorHeight = 4.0f;  // Větší patra pro veřejné budovy
+        //TODO: think of more specific way to determine average floor height
+        //perhaps get (hight of building arcgis model)/(floor count) = avg. floor height
+
+        float defaultHeight = 15f; //average building height
+        float floorHeight = 4.0f;  //default floor height
 
         if (building.tags == null)
             return defaultHeight;
 
+        //extract height from json object tags
+        //TODO: this might never be used, remove later ???
         if (building.tags.TryGetValue("height", out string heightStr)) {
             heightStr = heightStr.Replace("m", "").Trim();
             if (float.TryParse(heightStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float h)) {
@@ -105,9 +126,9 @@ public class BuildingFetcher : MonoBehaviour {
             }
         }
 
+        //calculate height from levels and average floor height
         if (building.tags.TryGetValue("building:levels", out string levelsStr)) {
             if (float.TryParse(levelsStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float l)) {
-                // Počet pater * 5m + 1m rezerva na atiku
                 return (l * floorHeight) + 1.0f;
             }
         }
@@ -121,43 +142,47 @@ public class BuildingFetcher : MonoBehaviour {
         if (worldPoints == null || worldPoints.Count < 3)
             return;
 
-        // 1. Centroid (střed budovy PŮDORYSNĚ)
+        // footprint center
         Vector3 centroidSeaLevel = Vector3.zero;
         foreach (var wp in worldPoints)
             centroidSeaLevel += wp;
         centroidSeaLevel /= worldPoints.Count;
 
-        // 2. Geo souřadnice a Pivot
-        ArcGISPoint centroidGeo = map.EngineToGeographic(centroidSeaLevel);
-        ArcGISPoint pivotGeo = new ArcGISPoint(centroidGeo.X, centroidGeo.Y, roofAltitudeFromRay, centroidGeo.SpatialReference);
-        Vector3 pivotWorldPosition = map.GeographicToEngine(pivotGeo);
+        // geolocation of the object
+        ArcGISPoint objMiddle = map.EngineToGeographic(centroidSeaLevel);
+        ArcGISPoint objPivot = new ArcGISPoint(objMiddle.X, objMiddle.Y, roofAltitudeFromRay, objMiddle.SpatialReference);
+        Vector3 unityRelPos = map.GeographicToEngine(objPivot);
 
-        // --- TVORBA HLAVNÍHO OBJEKTU ---
+        // gameobject reconstruction
         currentSelection = new GameObject($"OSM_Selection_{buildingData.id}");
         GameObject buildingObj = currentSelection;
         if (map != null)
             buildingObj.transform.SetParent(map.transform, true);
 
-        buildingObj.transform.position = pivotWorldPosition;
+        //place the object at relative position
+        buildingObj.transform.position = unityRelPos;
 
-        int layerIndex = LayerMask.NameToLayer("Buildings");
-        buildingObj.layer = (layerIndex != -1) ? layerIndex : 0;
+        int layer = LayerMask.NameToLayer("Buildings");
+        //buildingObj.layer = (layer != -1) ? layer : 0;
+        if (layer != -1)
+            buildingObj.layer = layer;
+        else
+            buildingObj.layer = 0;
 
         var locationComponent = buildingObj.AddComponent<ArcGISLocationComponent>();
-        locationComponent.Position = pivotGeo;
+        locationComponent.Position = objPivot;
         locationComponent.Rotation = new ArcGISRotation(0, 90, 0);
         locationComponent.enabled = true;
 
         var mf = buildingObj.AddComponent<MeshFilter>();
         var mr = buildingObj.AddComponent<MeshRenderer>();
-        // Poznámka: Materiál pro budovu neřešíme, protože ji stejně zneviditelníme.
 
-        // --- MESH GENERACE (Původní kód beze změny) ---
+        //generation
         Mesh mesh = new Mesh();
         if (worldPoints.Count * 2 > 65000)
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-        int n = worldPoints.Count;
-        Vector3[] verts = new Vector3[n * 2];
+        //int n = worldPoints.Count;
+        Vector3[] verts = new Vector3[worldPoints.Count * 2];
 
         float osmHeight = GetRealHeight(buildingData);
         if (osmHeight < 5f)
@@ -167,27 +192,27 @@ public class BuildingFetcher : MonoBehaviour {
         float bottomY = -osmHeight;
         float inflation = 0.1f;
 
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < worldPoints.Count; i++) {
             Vector3 offset = worldPoints[i] - centroidSeaLevel;
             Vector3 local = new Vector3(offset.x, 0, offset.z);
             Vector3 dir = local.normalized;
             Vector3 inflated = local + (dir * inflation);
 
             verts[i] = new Vector3(inflated.x, bottomY, inflated.z);
-            verts[i + n] = new Vector3(inflated.x, topY, inflated.z);
+            verts[i + worldPoints.Count] = new Vector3(inflated.x, topY, inflated.z);
         }
 
         mesh.vertices = verts;
 
         List<int> tris = new List<int>();
-        int off = n;
-        for (int i = 1; i < n - 1; i++) {
+        int off = worldPoints.Count;
+        for (int i = 1; i < worldPoints.Count - 1; i++) {
             tris.Add(off);
             tris.Add(off + i);
             tris.Add(off + i + 1);
         }
-        for (int i = 0; i < n; i++) {
-            int next = (i + 1) % n;
+        for (int i = 0; i < worldPoints.Count; i++) {
+            int next = (i + 1) % worldPoints.Count;
             tris.Add(i);
             tris.Add(i + off);
             tris.Add(next);
@@ -210,41 +235,62 @@ public class BuildingFetcher : MonoBehaviour {
         var col = buildingObj.AddComponent<MeshCollider>();
         col.sharedMesh = mesh;
 
-        // ==========================================
-        // === ZDE ZAČÍNÁ OPRAVA (HIGHLIGHT) ===
-        // ==========================================
-
-        // 1. DUCH BUDOVY - Uděláme ho neviditelným (ale klikatelným)
-        // Místo řešení průhlednosti ho prostě vypneme vykreslování.
+        //enable the ghost
         mr.enabled = false;
 
-        // 2. PODLAHA - KRUH (Válec)
+        //===========================================
+        /*
+        
+        Shader buildingShader = Shader.Find("Universal Render Pipeline/Lit");
+        if (buildingShader == null) {
+            buildingShader = Shader.Find("Universal Render Pipeline/UnLit");
+        }
+
+        Material buildingMat = new Material(buildingShader);
+        buildingMat.SetColor("_BaseColor", new Color(0f, 0f, 1f, 0.7f));
+        buildingMat.SetFloat("_Smoothness", 0.0f);
+        buildingMat.EnableKeyword("_EMISSION");
+        buildingMat.SetColor("_EmissionColor", new Color(0f, 0f, 1f) * 1.5f);
+        buildingMat.SetFloat("_Surface", 1);
+        buildingMat.SetFloat("_Blend", 0);
+        buildingMat.SetInt("_SrcBlend", (int) UnityEngine.Rendering.BlendMode.One);
+        buildingMat.SetInt("_DstBlend", (int) UnityEngine.Rendering.BlendMode.One);
+        buildingMat.SetFloat("_ZWrite", 0);
+        buildingMat.renderQueue = (int) UnityEngine.Rendering.RenderQueue.Transparent;
+        buildingMat.SetFloat("_Cull", (float) UnityEngine.Rendering.CullMode.Off);
+        buildingMat.SetInt("_ZTest", (int) UnityEngine.Rendering.CompareFunction.LessEqual);
+
+        mr.material = buildingMat;
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        
+        // ==========================================
+        */
+
+        // highlight floor object
         GameObject floorObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         floorObj.name = "Floor_Highlight";
         floorObj.transform.SetParent(buildingObj.transform, false);
 
-        // ZAROVNÁNÍ NA STŘED:
-        // mesh.bounds.center nám řekne, kde je optický střed budovy vůči pivotu.
-        // bottomY + 1.0f zajistí, že to bude metr ode dna (aby to neblikalo v zemi).
+        // center alignment
+        // mesh center is optical center of object
+        // the height of the highlight above ground
         Vector3 center = mesh.bounds.center;
         floorObj.transform.localPosition = new Vector3(center.x, bottomY + 1.0f, center.z);
-        floorObj.transform.localRotation = Quaternion.identity; // Válec stojí, to je OK pro kruh
+        floorObj.transform.localRotation = Quaternion.identity;
 
-        // VELIKOST KRUHU:
+        // size and dimensions of the floor highlight
         Bounds b = mesh.bounds;
         float maxSize = Mathf.Max(b.size.x, b.size.z);
-        float diameter = maxSize * 1.3f; // 1.3x větší než budova (mírně větší)
-
-        // Scale: X, Z = průměr. Y = výška (splácneme ho na placku 0.05)
+        float diameter = maxSize * 1.3f;
         floorObj.transform.localScale = new Vector3(diameter, 0.05f, diameter);
 
-        // ODSTRANIT KOLIZI VÁLCE (aby nepřekážela)
+        // remove collider
         Destroy(floorObj.GetComponent<Collider>());
 
-        // MATERIÁL A ZÁŘE (GLOW)
+        // material glow
         var floorMr = floorObj.GetComponent<MeshRenderer>();
 
-        // Použijeme "Standard" shader, protože ten funguje vždycky a neudělá fialovou chybu
+        // universal material 
         Shader floorShader = Shader.Find("Universal Render Pipeline/Lit");
         if (floorShader == null) {
             floorShader = Shader.Find("Universal Render Pipeline/UnLit");
@@ -263,36 +309,20 @@ public class BuildingFetcher : MonoBehaviour {
         floorMat.renderQueue = (int) UnityEngine.Rendering.RenderQueue.Transparent;
         floorMat.SetFloat("_Cull", (float) UnityEngine.Rendering.CullMode.Off);
         floorMat.SetInt("_ZTest", (int) UnityEngine.Rendering.CompareFunction.LessEqual);
-        // Nastavíme průhledný režim (Fade/Transparent)
-        //floorMat.SetFloat("_Mode", 2); // 2 = Fade
-        //floorMat.SetInt("_SrcBlend", (int) UnityEngine.Rendering.BlendMode.SrcAlpha);
-        //floorMat.SetInt("_DstBlend", (int) UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-        //floorMat.SetInt("_ZWrite", 0);
-        //floorMat.DisableKeyword("_ALPHATEST_ON");
-        //floorMat.EnableKeyword("_ALPHABLEND_ON");
-        //floorMat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-        //floorMat.renderQueue = 3000;
-
-        // Barva: Zelená, poloprůhledná
-        //Color neonGreen = new Color(0f, 1f, 0f, 0.5f);
-        //floorMat.color = neonGreen;
-
-        // ZÁŘE (Emission) - Tady to "ohulíme"
-        //floorMat.EnableKeyword("_EMISSION");
-        // Násobíme 10x, aby to svítilo i v jasném dni
-        //floorMat.SetColor("_EmissionColor", new Color(0f, 1f, 0f) * 10.0f);
 
         floorMr.material = floorMat;
         floorMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-        // ==========================================
-        // === KONEC OPRAVY ===
-        // ==========================================
+        // object created, saving for mission start
+        buildingObjectReady = buildingObj;
+        buildingWorldPoints = worldPoints;
+        missionController.ProcessMission(buildingObjectReady, buildingWorldPoints);
+        UpdateButtonState();
+    }
 
-        if (missionController != null) {
-            missionController.ProcessMission(buildingObj, worldPoints);
-        } else {
-            Debug.LogWarning("Chybí DroneMissionController v Inspectoru!");
+    private void UpdateButtonState() {
+        if (launchMissionButton != null) {
+            launchMissionButton.interactable = true;
         }
     }
 }
