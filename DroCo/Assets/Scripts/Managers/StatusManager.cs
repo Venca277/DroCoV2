@@ -75,8 +75,8 @@ public class StatusManager : MonoBehaviour {
                     break;
             }
 
-            if (statusData.drone_name != null && statusData.drone_name != droneName.text) {
-                droneName.text = statusData.drone_name;
+            if (statusData.drone_model != null && statusData.drone_model != droneName.text) {
+                droneName.text = statusData.drone_model;
             } else if (droneName.text == null || droneName.text == "") {
                 droneName.text = "Unknown Aircraft";
             }

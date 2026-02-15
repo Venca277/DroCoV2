@@ -1,9 +1,12 @@
 using System.Collections.Generic;
 using UnityEngine;
-using Esri.ArcGISMapsSDK.Components; // Nutné pro práci s mapou
-using Esri.GameEngine.Geometry;       // Nutné pro ArcGISPoint
+using Esri.ArcGISMapsSDK.Components;
+using Esri.GameEngine.Geometry;
+using UnityEngine.UI;
+using Unity.VisualScripting;
+using TMPro;
+using UnityEditor.VersionControl;
 
-// Pomocná třída pro GPS souřadnice, kterou budeme posílat dronu
 [System.Serializable]
 public class GPSWaypoint {
     public double latitude;
@@ -14,25 +17,28 @@ public class GPSWaypoint {
 public class MissionGenerator : MonoBehaviour {
 
     [Header("ArcGIS Reference")]
-    public ArcGISMapComponent mapComponent; // SEM PŘETÁHNĚTE OBJEKT "Map" Z HIERARCHY!
+    public ArcGISMapComponent mapComponent; //map object from hierarchy
 
-    [Header("Parametry letu")]
-    [Tooltip("Vzdálenost od stěny budovy (metry)")]
+    [Header("Flight Path Parameters")]
+    [Tooltip("Distance of orbit from building")]
     public float scanDistance = 2.0f;
 
-    [Tooltip("Výškový rozestup mezi závity (metry)")]
+    [Tooltip("Vertical step")]
     public float verticalStep = 1.5f;
 
-    [Header("Vzhled Trubky")]
+    [Header("Path visual")]
     public bool use3DTubes = true;
     public Color pathColor = Color.blue;
     public float tubeThickness = 0.2f;
 
-    [Header("Waypointy")]
+    [Header("Waypoints")]
     public GameObject waypointPrefab;
     public float waypointSize = 0.3f;
 
-    // Interní
+    [Header("Icons")]
+    public Sprite mapActiveIcon;
+    public Sprite mapIcon;
+
     private LineRenderer lineRenderer;
     private List<GameObject> spawnedObjects = new List<GameObject>();
 
@@ -57,9 +63,6 @@ public class MissionGenerator : MonoBehaviour {
         lineRenderer.material = mat;
     }
 
-    /// <summary>
-    /// Hlavní funkce: Vygeneruje trasu, vykreslí ji v Unity a vrátí body ve World Space
-    /// </summary>
     public List<Vector3> GenerateScanPath(GameObject buildingObj, List<Vector3> footprintPoints) {
         ClearPath();
 
@@ -108,13 +111,11 @@ public class MissionGenerator : MonoBehaviour {
         // 3. Vykreslení
         VisualizePath(finalPath);
 
+        AddMissionToUI();
         // Vrátíme Unity souřadnice, aby je Controller mohl převést
         return finalPath;
     }
 
-    /// <summary>
-    /// Převede Unity Vector3 body na reálné GPS (Lat/Lon/Alt)
-    /// </summary>
     public List<GPSWaypoint> ConvertToGPSCoordinates(List<Vector3> unityPath) {
         List<GPSWaypoint> gpsPath = new List<GPSWaypoint>();
 
@@ -223,5 +224,60 @@ public class MissionGenerator : MonoBehaviour {
 
     public bool HasMission() {
         return spawnedObjects.Count > 0;
+    }
+
+    public void AddMissionToUI() {
+        GameObject missionList = GameObject.Find("MissionsListContainer");
+        if (missionList == null) {
+            Debug.LogWarning("couldnt find missionlist");
+            return;
+        }
+
+        Transform content = missionList.transform.Find("Content");
+        if (content == null) {
+            Debug.LogWarning("couldnt find content");
+            return;
+        }
+        Transform header = missionList.transform.Find("Header");
+        if (header == null) {
+            Debug.LogWarning("couldnt find header");
+            return;
+        }
+
+        TMP_InputField scanDistance = content.Find("Row1/scanDistance").GetComponent<TMP_InputField>();
+        TMP_InputField verticalStep = content.Find("Row2/verticalStep").GetComponent<TMP_InputField>();
+        Toggle use3DTubes = content.Find("Row3/use3Dtubes").GetComponent<Toggle>();
+        TMP_Dropdown pathColor = content.Find("Row4/pathColor").GetComponent<TMP_Dropdown>();
+        TMP_InputField tubeThickness = content.Find("Row5/tubeThikness").GetComponent<TMP_InputField>();
+        TMP_InputField waypointSize = content.Find("Row6/waypointSize").GetComponent<TMP_InputField>();
+        if (scanDistance == null || verticalStep == null || use3DTubes == null || pathColor == null || tubeThickness == null || waypointSize == null) {
+            Debug.LogWarning($"couldnt find UI elements: {scanDistance}, {verticalStep}, {use3DTubes}, {pathColor}, {tubeThickness}, {waypointSize}");
+            return;
+        }
+
+        scanDistance.text = $"{this.scanDistance}";
+        verticalStep.text = $"{this.verticalStep}";
+        use3DTubes.isOn = this.use3DTubes;
+        pathColor.options.Clear();
+        pathColor.options.Add(new TMP_Dropdown.OptionData("Blue"));
+        pathColor.options.Add(new TMP_Dropdown.OptionData("Red"));
+        pathColor.options.Add(new TMP_Dropdown.OptionData("Green"));
+        pathColor.options.Add(new TMP_Dropdown.OptionData("Yellow"));
+        pathColor.options.Add(new TMP_Dropdown.OptionData("Cyan"));
+        pathColor.options.Add(new TMP_Dropdown.OptionData("Magenta"));
+        pathColor.value = 0;
+        tubeThickness.text = $"{this.tubeThickness}";
+        waypointSize.text = $"{this.waypointSize}";
+
+        Image headerImage = header.Find("Image").GetComponent<Image>();
+        if (headerImage != null) {
+            if (mapActiveIcon != null) {
+                headerImage.sprite = mapActiveIcon;
+            } else {
+                Debug.LogWarning("couldnt find MapActive sprite");
+            }
+        } else {
+            Debug.LogWarning("couldnt find header image");
+        }
     }
 }

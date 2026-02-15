@@ -145,6 +145,7 @@ public class WebSocketServerBehavior : WebSocketBehavior {
     }
 
     private IEnumerator HandleStatusUpdate(DroneStatusData statusData) {
+        StatusUpdate.Instance.HandleStatusUpdate(statusData);
         yield return null;
     }
 

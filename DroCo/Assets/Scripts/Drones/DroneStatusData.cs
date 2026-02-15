@@ -8,8 +8,7 @@ using System;
 public class DroneStatusData {
     public string client_id;
     public long timestamp;
-
-    public string drone_name;
+    public string drone_model;
     public GPSData gps;
     public BatteryData battery;
     public OrientationData orientation;
