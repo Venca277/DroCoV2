@@ -9,7 +9,27 @@ public class SimpleAccordion : MonoBehaviour {
 
     public void Toggle() {
         bool currentState = contentObject.activeSelf;
-        contentObject.SetActive(!currentState);
+        if (contentObject == null) {
+            Debug.LogWarning("Content object is not assigned in SimpleAccordion");
+            return;
+        }
+
+        if (contentObject.transform.parent.name == "DroneListContainer") {
+            if (DroneManager.Instance.Drones.Count > 0) {
+                contentObject.SetActive(!currentState);
+            } else {
+                Toast.call.Show("No drones connected", 2.0f, false);
+            }
+        } else if (contentObject.transform.parent.name == "MissionsListContainer") {
+            MissionGenerator missionGenerator = FindObjectOfType<MissionGenerator>();
+            if (missionGenerator == null) {
+                return;
+            }
+            if (missionGenerator.HasMission())
+                contentObject.SetActive(!currentState);
+            else
+                Toast.call.Show("No mission selected", 2.0f, false);
+        }
 
         LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
 
