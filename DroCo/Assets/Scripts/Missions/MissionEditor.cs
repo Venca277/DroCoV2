@@ -27,9 +27,10 @@ public class MissionEditor : MonoBehaviour {
     private Dictionary<WaypointSelect, Vector3> lastWPpositions = new Dictionary<WaypointSelect, Vector3>();
     private float lastUpdate = 0f;
     private float updateInterval = 0.05f;
+    public bool dragUI = false;
 
     void Start() {
-
+        UIGizmo.SetSelectedWaypoint(null);
     }
 
     void Update() {
@@ -51,7 +52,8 @@ public class MissionEditor : MonoBehaviour {
 
         //update drag on with arrows or free drag
         bool arrdrag = gizmo != null && gizmo.GetComponent<HandleArrows>() != null && gizmo.GetComponent<HandleArrows>().dragging;
-        if (Input.GetMouseButton(0) && (iAmHolding || arrdrag)) {
+        bool columndrag = ColumnGizmo.Instance.dragging;
+        if (Input.GetMouseButton(0) && (iAmHolding || arrdrag) && !columndrag) {
             UpdateDragging();
         }
 
@@ -91,10 +93,24 @@ public class MissionEditor : MonoBehaviour {
                     //clear the list
                     for (int i = 0; i < selectedWaypoints.Count; i++) {
                         selectedWaypoints[i].Select(false);
+                        GameObject cyl = selectedWaypoints[i].transform.Find("ColumnDown")?.gameObject;
+                        GameObject cyl2 = selectedWaypoints[i].transform.Find("ColumnUp")?.gameObject;
+                        if (cyl != null) {
+                            Destroy(cyl);
+                        }
+                        if (cyl2 != null) {
+                            Destroy(cyl2);
+                        }
+                        GameObject gndarrs = GameObject.Find("GroundArrows");
+                        if (gndarrs != null) {
+                            Destroy(gndarrs);
+                        }
+                        UIGizmo.SetSelectedWaypoint(null);
                     }
                     selectedWaypoints.Clear();
                     selectedWaypoints.Add(selectedPoint);
                     selectedPoint.Select(true);
+                    UIGizmo.SetSelectedWaypoint(selectedPoint.transform);
 
                     //one is selected and no arrows currently
                     //TODO: support gizmoing with more selected
@@ -106,12 +122,14 @@ public class MissionEditor : MonoBehaviour {
                         HandleArrows nav = gizmo.AddComponent<HandleArrows>();
                         nav.wp = selectedPoint.transform;
                         nav.missioneditor = this;
+                        ColumnGizmo.Instance.createColumn(selectedPoint);
                     }
                 } else {
                     if (gizmo != null)
                         Destroy(gizmo);
                     selectedWaypoints.Add(selectedPoint);
                     selectedPoint.Select(true);
+                    //UIGizmo.SetSelectedWaypoint(selectedPoint.transform);
                 }
                 Debug.Log("Selected waypoint on: " + selectedPoint.gameObject.transform.position + "total selected: " + selectedWaypoints.Count + "; ");
             }
@@ -155,8 +173,9 @@ public class MissionEditor : MonoBehaviour {
             }
         }
 
+
         //normal drag for more waypoints and free drag
-        if (selectedWaypoints.Count > 0) {
+        if (selectedWaypoints.Count > 0 && !dragUI) {
 
             //update tubes and save wps
             savedTubes.Clear();
@@ -186,7 +205,7 @@ public class MissionEditor : MonoBehaviour {
         //casting with sphere search to detect any pipes
         //any Tube_Segment objs are added to the list
         Ray ray = new Ray(waypoint.transform.position, Vector3.zero);
-        Collider[] hits = Physics.OverlapSphere(waypoint.transform.position, 0.8f, LayerMask.GetMask("Mission"));
+        Collider[] hits = Physics.OverlapSphere(waypoint.transform.position, 0.5f, LayerMask.GetMask("Mission"));
         Debug.Log("Found " + hits.Length + " colliders near waypoint.");
         List<GameObject> tubes = new List<GameObject>();
 
@@ -207,7 +226,7 @@ public class MissionEditor : MonoBehaviour {
         return tubes;
     }
 
-    public void UpdateTubes(List<GameObject> tubes, Vector3 oldwaypoint, WaypointSelect newwaypoint) {
+    public void UpdateTubes(List<GameObject> tubes, Vector3 oldwaypoint, Vector3 newwaypoint) {
         foreach (var tube in tubes) {
             //recaulculate tube position
             //we have to keep the start end
@@ -219,11 +238,11 @@ public class MissionEditor : MonoBehaviour {
             //calculate new center
             //keep the distance
             //new position from drag
-            Vector3 newcenter = (newwaypoint.transform.position + startpoint) / 2f;
-            float distance = Vector3.Distance(newwaypoint.transform.position, startpoint);
+            Vector3 newcenter = (newwaypoint + startpoint) / 2f;
+            float distance = Vector3.Distance(newwaypoint, startpoint);
             tube.transform.position = newcenter;
             tube.transform.rotation = Quaternion.identity;
-            tube.transform.LookAt(newwaypoint.transform.position);
+            tube.transform.LookAt(newwaypoint);
             tube.transform.Rotate(90, 0, 0);
             tube.transform.localScale = new Vector3(tube.transform.localScale.x, distance / 2f, tube.transform.localScale.z);
         }
@@ -243,7 +262,7 @@ public class MissionEditor : MonoBehaviour {
                         List<GameObject> tubes = savedTubes[selectedWaypoints[i]];
                         Vector3 oldwaypoint = lastWPpositions[selectedWaypoints[i]];
 
-                        UpdateTubes(tubes, oldwaypoint, selectedWaypoints[i]);
+                        UpdateTubes(tubes, oldwaypoint, selectedWaypoints[i].transform.position);
 
                         lastWPpositions[selectedWaypoints[i]] = selectedWaypoints[i].transform.position;
                     }
@@ -253,7 +272,7 @@ public class MissionEditor : MonoBehaviour {
         }
 
         //normal drag for more waypoints and free drag
-        if (selectedWaypoints.Count > 0) {
+        if (selectedWaypoints.Count > 0 && iAmHolding && !dragUI) {
             Vector3 curr = GetCoords();
             Vector3 moveoff = curr - lastMouseClick;
 
@@ -279,7 +298,7 @@ public class MissionEditor : MonoBehaviour {
                         List<GameObject> tubes = savedTubes[selectedWaypoints[i]];
                         Vector3 oldwaypoint = lastWPpositions[selectedWaypoints[i]];
 
-                        UpdateTubes(tubes, oldwaypoint, selectedWaypoints[i]);
+                        UpdateTubes(tubes, oldwaypoint, selectedWaypoints[i].transform.position);
 
                         lastWPpositions[selectedWaypoints[i]] = selectedWaypoints[i].transform.position;
                     }
@@ -298,8 +317,21 @@ public class MissionEditor : MonoBehaviour {
 
         for (int i = 0; i < selectedWaypoints.Count; i++) {
             selectedWaypoints[i].Select(false);
+            GameObject cyl = selectedWaypoints[i].transform.Find("ColumnDown")?.gameObject;
+            GameObject cyl2 = selectedWaypoints[i].transform.Find("ColumnUp")?.gameObject;
+            if (cyl != null) {
+                Destroy(cyl);
+            }
+            if (cyl2 != null) {
+                Destroy(cyl2);
+            }
+            GameObject gndarrs = GameObject.Find("GroundArrows");
+            if (gndarrs != null) {
+                Destroy(gndarrs);
+            }
         }
         selectedWaypoints.Clear();
+        UIGizmo.SetSelectedWaypoint(null);
     }
 
     public void InitDragArr(WaypointSelect wp) {
@@ -313,7 +345,76 @@ public class MissionEditor : MonoBehaviour {
         mainCamera.GetComponent<ArcGISCameraControllerTouch>().enabled = false;
     }
 
+    public void InitDragColumn(List<WaypointSelect> colWaypoints) {
+        //clear list
+        savedTubes.Clear();
+        lastWPpositions.Clear();
+
+        //save tubes and positions for drag
+        foreach (WaypointSelect wp in colWaypoints) {
+            savedTubes[wp] = FindTube(wp.gameObject);
+            lastWPpositions[wp] = wp.transform.position;
+        }
+        mainCamera.GetComponent<ArcGISCameraControllerTouch>().enabled = false;
+    }
+
     public bool HasMission() {
         return selectedWaypoints.Count > 0;
+    }
+
+    public void MoveWaypoint(WaypointSelect wp, Vector3 newPos) {
+        Vector3 oldPos = wp.transform.position;
+        wp.transform.position = newPos;
+
+        if (savedTubes.ContainsKey(wp)) {
+            List<GameObject> tubes = savedTubes[wp];
+            UpdateTubes(tubes, oldPos, newPos);
+            lastWPpositions[wp] = newPos;
+        }
+
+        GameObject wparrows = GameObject.Find("arrows");
+        if (wparrows != null) {
+            wparrows.transform.position = newPos;
+        }
+
+        GameObject gndarrs = GameObject.Find("GroundArrows");
+        if (gndarrs != null) {
+            float y = gndarrs.transform.position.y;
+            gndarrs.transform.position = new Vector3(newPos.x, y, newPos.z);
+        }
+    }
+
+    public void MoveWaypointColumn(List<WaypointSelect> colWaypoints, Vector3 offset) {
+        foreach (WaypointSelect wp in colWaypoints) {
+            Vector3 oldPos = wp.transform.position;
+            Vector3 newPos = oldPos + offset;
+
+            wp.transform.position = newPos;
+            if (savedTubes.ContainsKey(wp)) {
+                List<GameObject> tubes = savedTubes[wp];
+                UpdateTubes(tubes, oldPos, newPos);
+                lastWPpositions[wp] = newPos;
+            } else {
+                savedTubes[wp] = FindTube(wp.gameObject);
+                List<GameObject> tubes = savedTubes[wp];
+                UpdateTubes(tubes, oldPos, newPos);
+                lastWPpositions[wp] = newPos;
+            }
+        }
+
+        if (colWaypoints.Count > 0) {
+            Vector3 mainWpPos = colWaypoints[0].transform.position;
+
+            GameObject wparrows = GameObject.Find("arrows");
+            if (wparrows != null) {
+                wparrows.transform.position = mainWpPos;
+            }
+
+            GameObject gndarrs = GameObject.Find("GroundArrows");
+            if (gndarrs != null) {
+                float y = gndarrs.transform.position.y;
+                gndarrs.transform.position = new Vector3(mainWpPos.x, y, mainWpPos.z);
+            }
+        }
     }
 }

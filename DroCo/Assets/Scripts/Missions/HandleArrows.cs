@@ -11,6 +11,9 @@ public class HandleArrows : MonoBehaviour {
     private GameObject xArrow;
     private GameObject yArrow;
     private GameObject zArrow;
+    private Renderer[] xgrafic;
+    private Renderer[] ygrafic;
+    private Renderer[] zgrafic;
 
     private Camera cam;
     private ArrowType? draggingArrow;
@@ -18,6 +21,7 @@ public class HandleArrows : MonoBehaviour {
     private Plane plane;
     public Transform wp;
     public MissionEditor missioneditor;
+    public float screensize = 0.1f;
     public bool dragging => draggingArrow != null;
 
     void Start() {
@@ -25,6 +29,9 @@ public class HandleArrows : MonoBehaviour {
         xArrow = createArrow(Vector3.right, Color.red);
         yArrow = createArrow(Vector3.up, Color.green);
         zArrow = createArrow(Vector3.forward, Color.blue);
+        xgrafic = xArrow.GetComponentsInChildren<Renderer>();
+        ygrafic = yArrow.GetComponentsInChildren<Renderer>();
+        zgrafic = zArrow.GetComponentsInChildren<Renderer>();
     }
 
     void Update() {
@@ -54,7 +61,7 @@ public class HandleArrows : MonoBehaviour {
         }
     }
 
-    private GameObject createArrow(Vector3 looksAt, Color color) {
+    public GameObject createArrow(Vector3 looksAt, Color color) {
         //plain game object for the arrows
         GameObject arrow = new GameObject("Arrow");
         arrow.transform.parent = transform;
@@ -64,19 +71,18 @@ public class HandleArrows : MonoBehaviour {
         GameObject stick = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         stick.transform.parent = arrow.transform;
         stick.transform.localPosition = looksAt * 0.5f;
-        stick.transform.localScale = new Vector3(0.05f, 0.5f, 0.05f);
+        stick.transform.localScale = new Vector3(0.05f, 0.5f, 0.1f);
 
         //tip of the arrow
         GameObject cone = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        cone.AddComponent<MeshFilter>();
-        MeshRenderer mr = cone.AddComponent<MeshRenderer>();
+        MeshFilter mr = cone.GetComponent<MeshFilter>();
         Mesh mesh = new Mesh();
-        cone.GetComponent<MeshFilter>().mesh = mesh;
+        mr.mesh = mesh;
 
         //size and dimension of cone
         cone.transform.parent = arrow.transform;
         cone.transform.localPosition = looksAt * 1f;
-        cone.transform.localScale = new Vector3(0.15f, 0.15f, 0.15f);
+        cone.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
 
         //detail of the cone, segments
         int segments = 7;
@@ -175,21 +181,31 @@ public class HandleArrows : MonoBehaviour {
         stick.layer = LayerMask.NameToLayer("Mission");
         cone.layer = LayerMask.NameToLayer("Mission");
 
+
+
         return arrow;
     }
 
     private void Dragging(ArrowType type) {
+        ResetHighlight(xgrafic);
+        ResetHighlight(ygrafic);
+        ResetHighlight(zgrafic);
+
         draggingArrow = type;
         startPos = transform.position;
 
         //on what plane to drag on
         Vector3 plane;
-        if (type == ArrowType.X)
+        if (type == ArrowType.X) {
             plane = Vector3.up;
-        else if (type == ArrowType.Y)
+            SetHighlight(xgrafic, Color.red);
+        } else if (type == ArrowType.Y) {
             plane = Vector3.forward;
-        else
+            SetHighlight(ygrafic, Color.green);
+        } else {
             plane = Vector3.up;
+            SetHighlight(zgrafic, Color.blue);
+        }
 
         this.plane = new Plane(plane, transform.position);
 
@@ -209,18 +225,44 @@ public class HandleArrows : MonoBehaviour {
             Vector3 diff = hitplace - startPos;
 
             //move arrow and waypoint
+            Vector3 newPos = wp.position;
             if (draggingArrow == ArrowType.X) {
+                newPos += new Vector3(diff.x, 0, 0);
                 transform.position += new Vector3(diff.x, 0, 0);
-                wp.position += new Vector3(diff.x, 0, 0);
             } else if (draggingArrow == ArrowType.Y) {
+                newPos += new Vector3(0, diff.y, 0);
                 transform.position += new Vector3(0, diff.y, 0);
-                wp.position += new Vector3(0, diff.y, 0);
             } else if (draggingArrow == ArrowType.Z) {
+                newPos += new Vector3(0, 0, diff.z);
                 transform.position += new Vector3(0, 0, diff.z);
-                wp.position += new Vector3(0, 0, diff.z);
             }
 
+            missioneditor.MoveWaypoint(wp.GetComponent<WaypointSelect>(), newPos);
             startPos = hitplace;
+        }
+    }
+
+    private void LateUpdate() {
+        if (cam == null)
+            return;
+
+        float distance = Vector3.Distance(cam.transform.position, transform.position);
+        float newScale = distance * screensize;
+        transform.localScale = Vector3.one * newScale;
+    }
+
+    private void ResetHighlight(Renderer[] grafics) {
+        foreach (Renderer r in grafics) {
+            Material mat = r.material;
+            mat.DisableKeyword("_EMISSION");
+        }
+    }
+
+    private void SetHighlight(Renderer[] grafics, Color color) {
+        foreach (Renderer g in grafics) {
+            Material mat = g.material;
+            mat.EnableKeyword("_EMISSION");
+            mat.SetColor("_EmissionColor", color * 30f);
         }
     }
 }
