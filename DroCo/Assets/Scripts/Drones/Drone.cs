@@ -99,13 +99,15 @@ public class Drone : InteractiveObject, IPointerNotifier {
         //DroneVideoScreen.localRotation = Quaternion.Euler(-(float) flightData.gimbal_orientation.pitch, (float) flightData.gimbal_orientation.yaw, -(float) flightData.gimbal_orientation.roll);
         DroneVideoScreen.localRotation = Quaternion.Euler(-(float) flightData.gimbal_orientation.pitch, (float) flightData.aircraft_orientation.yaw + (float) flightData.gimbal_orientation.yaw_relative, -(float) flightData.gimbal_orientation.roll);
         ThirdPersonView.localRotation = Quaternion.Euler(0f, (float) flightData.aircraft_orientation.yaw, 0f);
-        
+
         drone2DRepresentation.UpdateFlightData(flightData);
 
         DroneListItem.UpdateHeight(flightData.altitude);
         DroneListItem.UpdateDistance(Vector3.Distance(Camera.main.transform.position, this.transform.position));
 
-        if (flightData.frame != "") {
+        //very dangerous bug, found 24. 2. 2026 by xsovakv00
+        //drone telemetry not checked for null
+        if (!string.IsNullOrEmpty(flightData.frame)) {
             byte[] frame = Convert.FromBase64String(flightData.frame);
 
             JpegPlayerTexture.LoadImage(frame);

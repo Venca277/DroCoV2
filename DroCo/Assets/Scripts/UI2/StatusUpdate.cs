@@ -80,7 +80,7 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             droneName.fontSize = 36;
         }
 
-        if (status.gps.signal_level >= 0 && status.gps.signal_level <= 5) {
+        if (status.gps != null && status.gps.signal_level >= 0 && status.gps.signal_level <= 5) {
             switch (status.gps.signal_level) {
                 case 0:
                     signal.sprite = noSignal;
@@ -150,15 +150,20 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             dronebarIcon.sprite = droneActive;
         }
 
-        if (status.battery.low_battery_warning) {
-            batteryIcon.sprite = batteryCritical;
-        } else if (status.battery.remaining_percent >= 75) {
-            batteryIcon.sprite = batteryFull;
-        } else if (status.battery.remaining_percent >= 50) {
-            batteryIcon.sprite = batteryMedium;
-        } else if (status.battery.remaining_percent >= 25) {
-            batteryIcon.sprite = batteryLow;
+        if (status.battery != null) {
+            if (status.battery.low_battery_warning) {
+                batteryIcon.sprite = batteryCritical;
+            } else if (status.battery.remaining_percent >= 75) {
+                batteryIcon.sprite = batteryFull;
+            } else if (status.battery.remaining_percent >= 50) {
+                batteryIcon.sprite = batteryMedium;
+            } else if (status.battery.remaining_percent >= 25) {
+                batteryIcon.sprite = batteryLow;
+            } else {
+                batteryIcon.sprite = batteryCritical;
+            }
         } else {
+            Debug.LogWarning("Battery data is null");
             batteryIcon.sprite = batteryCritical;
         }
         batteryIcon.rectTransform.sizeDelta = new Vector2(40, 40);
@@ -177,37 +182,41 @@ public class StatusUpdate : Singleton<StatusUpdate> {
         state3.gameObject.SetActive(false);
         state4.gameObject.SetActive(false);
         state5.gameObject.SetActive(false);
-        if (!status.warnings.strong_wind_warning && !status.warnings.max_height_reached && !status.warnings.max_distance_reached && !status.warnings.imu_preheating && !status.warnings.compass_error) {
+
+        if (status.warnings != null) {
+            if (!status.warnings.strong_wind_warning && !status.warnings.max_height_reached && !status.warnings.max_distance_reached && !status.warnings.imu_preheating && !status.warnings.compass_error) {
+                state1.sprite = statusOK;
+                state1.gameObject.SetActive(true);
+            } else {
+                if (status.warnings.strong_wind_warning) {
+                    state1.sprite = warningWind;
+                    state1.gameObject.SetActive(true);
+                    state1.rectTransform.sizeDelta = new Vector2(40, 40);
+                }
+                if (status.warnings.max_height_reached) {
+                    state2.sprite = warningHeight;
+                    state2.gameObject.SetActive(true);
+                    state2.rectTransform.sizeDelta = new Vector2(40, 40);
+                }
+                if (status.warnings.imu_preheating) {
+                    state3.sprite = warningTemperature;
+                    state3.gameObject.SetActive(true);
+                    state3.rectTransform.sizeDelta = new Vector2(40, 40);
+                }
+                if (status.warnings.max_distance_reached) {
+                    state4.sprite = warningHome;
+                    state4.gameObject.SetActive(true);
+                    state4.rectTransform.sizeDelta = new Vector2(40, 40);
+                }
+                if (status.warnings.compass_error) {
+                    state5.sprite = warningCompass;
+                    state5.gameObject.SetActive(true);
+                    state5.rectTransform.sizeDelta = new Vector2(40, 40);
+                }
+            }
+        } else {
             state1.sprite = statusOK;
             state1.gameObject.SetActive(true);
-        } else {
-            if (status.warnings.strong_wind_warning) {
-                state1.sprite = warningWind;
-                state1.gameObject.SetActive(true);
-                state1.rectTransform.sizeDelta = new Vector2(40, 40);
-            }
-            if (status.warnings.max_height_reached) {
-                state2.sprite = warningHeight;
-                state2.gameObject.SetActive(true);
-                state2.rectTransform.sizeDelta = new Vector2(40, 40);
-            }
-            if (status.warnings.imu_preheating) {
-                state3.sprite = warningTemperature;
-                state3.gameObject.SetActive(true);
-                state3.rectTransform.sizeDelta = new Vector2(40, 40);
-            }
-            if (status.warnings.max_distance_reached) {
-                state4.sprite = warningHome;
-                state4.gameObject.SetActive(true);
-                state4.rectTransform.sizeDelta = new Vector2(40, 40);
-            }
-            if (status.warnings.compass_error) {
-                state5.sprite = warningCompass;
-                state5.gameObject.SetActive(true);
-                state5.rectTransform.sizeDelta = new Vector2(40, 40);
-            }
         }
-
     }
-
 }

@@ -9364,6 +9364,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   screensize: 0.05
+  wp: {fileID: 0}
 --- !u!1 &981959901
 GameObject:
   m_ObjectHideFlags: 0

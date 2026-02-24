@@ -71,19 +71,71 @@ public class WebSocketServerBehavior : WebSocketBehavior {
         base.OnMessage(e);
 
         //Debug.Log(e.Data);
-        Message<string> msg = JsonUtility.FromJson<Message<string>>(e.Data);
+        //Debug.Log("Received message at " + System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+        string jsonText = "";
+
+        if (e.IsBinary) {
+            //Debug.Log($"data is in binary format with length {e.RawData.Length} bytes");
+            //read the json length
+            byte[] raw = e.RawData;
+            int jsonLength = (raw[0] << 24) | (raw[1] << 16) | (raw[2] << 8) | raw[3];
+
+            if (jsonLength <= 0 || jsonLength > raw.Length)
+                return;
+
+            jsonText = System.Text.Encoding.UTF8.GetString(raw, 4, jsonLength);
+
+            //random debug to see the data
+            if (new System.Random().Next(100) < 5) {
+                //Debug.Log("ROZBALENY JSON: " + jsonText);
+            }
+
+            /*
+            try {
+                Message<DroneFlightData> dfd = JsonUtility.FromJson<Message<DroneFlightData>>(jsonText);
+                if (dfd != null && dfd.data != null) {
+                    UnityMainThreadDispatcher.Instance().Enqueue(UpdateDroneFlightData(dfd.data));
+                }
+            } catch (System.Exception ex) {
+                Debug.LogError("Chyba parsovani rozbaleneho JSONu: " + ex.Message);
+            }
+            */
+
+            /*
+            int imageStartIndex = 4 + jsonLength + 4;
+            int imageLength = raw.Length - imageStartIndex;
+            byte[] jpegBytes = new byte[imageLength];
+            System.Buffer.BlockCopy(raw, imageStartIndex, jpegBytes, 0, imageLength);
+            */
+        } else {
+            Debug.Log($"data is in text format: {e.Data}");
+            jsonText = e.Data;
+        }
+
+        if (string.IsNullOrEmpty(jsonText)) {
+            return;
+        }
+
+        Message<string> msg = JsonUtility.FromJson<Message<string>>(jsonText);
+        if (msg == null) {
+            Debug.LogError("Failed to parse incoming message as JSON: " + jsonText);
+            return;
+        }
+
         if (msg.type == "hello") {
-            DoHandshake(ID, JsonUtility.FromJson<Message<Hello>>(e.Data));
+            DoHandshake(ID, JsonUtility.FromJson<Message<Hello>>(jsonText));
         } else if (handshake_done && msg.type == "data_broadcast") {
 
-            Message<DroneFlightData> dfd = JsonUtility.FromJson<Message<DroneFlightData>>(e.Data);
+            Message<DroneFlightData> dfd = JsonUtility.FromJson<Message<DroneFlightData>>(jsonText);
 
             UnityMainThreadDispatcher.Instance().Enqueue(UpdateDroneFlightData(dfd.data));
         } else if (handshake_done && msg.type == "status_update") {
-            Message<DroneStatusData> status = JsonUtility.FromJson<Message<DroneStatusData>>(e.Data);
+            Debug.Log("Received status update message: " + jsonText);
+            Message<DroneStatusData> status = JsonUtility.FromJson<Message<DroneStatusData>>(jsonText);
+            Debug.Log("Parsed status update for drone " + status.data);
             UnityMainThreadDispatcher.Instance().Enqueue(HandleStatusUpdate(status.data));
         } else {
-            Debug.LogError("Unknown data received! " + e.Data);
+            Debug.LogError("Unknown data received! " + jsonText);
         }
     }
 
@@ -145,6 +197,7 @@ public class WebSocketServerBehavior : WebSocketBehavior {
     }
 
     private IEnumerator HandleStatusUpdate(DroneStatusData statusData) {
+        Debug.Log("Received status update for drone " + statusData.client_id + " at timestamp " + Time.time.ToString("hh:mm:ss"));
         StatusUpdate.Instance.HandleStatusUpdate(statusData);
         yield return null;
     }
@@ -251,18 +304,16 @@ public class WebSocketServer : Singleton<WebSocketServer> {
 
     public void BroadcastToAll(string jsonMessage) {
         if (Server != null && Server.IsListening) {
-            // Získáme službu na cestě "/" (tam, kde běží WebSocketServerBehavior)
-            // Pokud by to nefungovalo, zkontrolujte v StartServer(), jakou cestu používáte (zde předpokládám "/")
             var service = Server.WebSocketServices["/"];
 
             if (service != null) {
                 Debug.Log($"Broadcasting message to {service.Sessions.Count} clients.");
                 service.Sessions.Broadcast(jsonMessage);
             } else {
-                Debug.LogError("Služba na cestě '/' nebyla nalezena!");
+                Debug.LogError("WebSocket service not found!");
             }
         } else {
-            Debug.LogWarning("Server neběží, nelze odeslat broadcast.");
+            Debug.LogWarning("No running server.");
         }
     }
 
