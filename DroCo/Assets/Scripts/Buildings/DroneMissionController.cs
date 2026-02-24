@@ -1,12 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
-using Newtonsoft.Json; // Doporučeno, nebo použijte JsonUtility
+using Newtonsoft.Json;
 
-// Pomocná obálka pouze pro síťovou komunikaci (aby Python poznal typ zprávy)
 [System.Serializable]
 public class NetworkWrapper {
-    public string type;       // např. "mission_upload"
-    public MissionData data;  // ZDE POUŽIJEME VAŠI EXISTUJÍCÍ TŘÍDU
+    public string type;
+    public MissionData data;
 }
 
 public class DroneMissionController : MonoBehaviour {
@@ -14,13 +13,12 @@ public class DroneMissionController : MonoBehaviour {
     [Header("Reference")]
     public MissionGenerator generator;
 
-    [Header("Startovní Pozice (Home)")]
+    [Header("Starting Point")]
     public double startLat = 49.226015;
     public double startLon = 16.597071;
     public double startAlt = 250.0;
 
-    // Parametry pro skenování (vyplníme do vaší struktury)
-    [Header("Parametry Skenu")]
+    [Header("Scan Parameters")]
     public float paramMaxHeight = 50f;
     public float paramMinHeight = 10f;
     public float paramOverlap = 0.5f;
@@ -131,35 +129,33 @@ public class DroneMissionController : MonoBehaviour {
         }
     }
 
-    // Pomocná funkce pro převod do vaší třídy Point
     private void AddPointToSegment(Segment segment, double lat, double lon, double alt) {
         Point p = new Point();
         p.latitude = lat;
         p.longitude = lon;
         p.altitude = alt;
-        p.altitudeType = "AMSL"; // Nebo "Relative", podle toho co používáte
+        p.altitudeType = "AMSL";
         segment.multipoint.points.Add(p);
     }
 
     private void SendMissionToNetwork(MissionData dataStructure) {
         if (WebSocketServer.Instance == null) {
-            Debug.LogError("WebSocketServer neběží! Nemohu odeslat misi.");
+            Debug.LogError("WebSocketServer not running!");
             return;
         }
 
-        // Zabalíme vaši strukturu do obálky s typem zprávy
+        //pack the struct into wrapper
         NetworkWrapper msg = new NetworkWrapper();
         msg.type = "mission_upload";
         msg.data = dataStructure;
 
-        // Serializace (Newtonsoft je lepší pro složité vnořené třídy)
+        //srialize to json
         string json = JsonConvert.SerializeObject(msg);
-        // Pokud nemáte Newtonsoft, použijte: string json = JsonUtility.ToJson(msg);
 
-        // Odeslání pomocí nové metody, kterou jsme přidali do Serveru
+        //send to all clients
         WebSocketServer.Instance.BroadcastToAll(json);
 
-        Debug.Log(">>> MISE ODESLÁNA (Complex Structure) <<<");
-        // Debug.Log(json); // Odkomentujte pro kontrolu JSONu
+        Debug.Log(">>> MISSION SENT <<<");
+        // Debug.Log(json);
     }
 }

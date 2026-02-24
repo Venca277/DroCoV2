@@ -73,7 +73,7 @@ public class MissionGenerator : MonoBehaviour {
         float startY = bounds.min.y + 2.0f;
         float endY = bounds.max.y + 1.0f;
 
-        // 1. Orbit Ring
+        //orbital ring generation
         List<Vector3> orbitRing = new List<Vector3>();
         Vector3 centroid = Vector3.zero;
         foreach (var p in footprintPoints)
@@ -88,7 +88,7 @@ public class MissionGenerator : MonoBehaviour {
             orbitRing.Add(offsetPoint);
         }
 
-        // 2. Helix Generace
+        //helix generation
         List<Vector3> finalPath = new List<Vector3>();
         float currentY = startY;
 
@@ -108,11 +108,11 @@ public class MissionGenerator : MonoBehaviour {
             currentY += verticalStep;
         }
 
-        // 3. Vykreslení
+        //renderer
         VisualizePath(finalPath);
 
         AddMissionToUI();
-        // Vrátíme Unity souřadnice, aby je Controller mohl převést
+        //return unity coords
         return finalPath;
     }
 
@@ -125,13 +125,13 @@ public class MissionGenerator : MonoBehaviour {
         }
 
         foreach (var point in unityPath) {
-            // SDK funkce pro převod: Engine (Unity) -> Geographic (GPS)
+            //relative unity coords to gps coords
             ArcGISPoint geoPos = mapComponent.EngineToGeographic(point);
 
             GPSWaypoint wp = new GPSWaypoint();
-            wp.latitude = geoPos.Y;  // Y je Latitude
-            wp.longitude = geoPos.X; // X je Longitude
-            wp.altitude = geoPos.Z;  // Z je Altitude
+            wp.latitude = geoPos.Y;  // Y is lat
+            wp.longitude = geoPos.X; // X is lon
+            wp.altitude = geoPos.Z;  // Z is alt
 
             gpsPath.Add(wp);
         }
@@ -139,7 +139,6 @@ public class MissionGenerator : MonoBehaviour {
         return gpsPath;
     }
 
-    // Samostatná funkce pro vizualizaci (abychom ji mohli volat i z Controlleru)
     public void VisualizePath(List<Vector3> path) {
         if (path.Count == 0)
             return;

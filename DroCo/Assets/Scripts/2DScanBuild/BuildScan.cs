@@ -12,7 +12,7 @@ public class BuildingClickOblet : MonoBehaviour {
     [SerializeField] private Transform missionParent;
 
     [Header("Occlusion")]
-    public LayerMask occlusionMask;  // nastavíš na "Occluder"
+    public LayerMask occlusionMask;
 
     private float lastClick = 0f;
     private float doubleClickTime = 0.25f;
@@ -31,20 +31,14 @@ public class BuildingClickOblet : MonoBehaviour {
             if (delta <= doubleClickTime) {
                 Ray ray = arcgisCamera.ScreenPointToRay(Input.mousePosition);
                 if (Physics.Raycast(ray, out var hit, 500f)) {
-                    // vytvoříme occluder pro tu budovu
                     CreateOccluderBoxFromHit(hit);
 
-                    // vygenerujeme waypointy
                     GenerateCircularMission(hit.point);
                 }
             }
         }
     }
 
-
-    // =============================================================
-    //          CREATE SIMPLE OCCLUDER BOX (VARIANTA A)
-    // =============================================================
     void CreateOccluderBox(Vector3 center) {
         float maxDistance = 200f;
 
@@ -94,15 +88,13 @@ public class BuildingClickOblet : MonoBehaviour {
         box.transform.position = pos;
         box.transform.localScale = size;
 
-        // nastav light layer pro occlusion
         box.layer = LayerMask.NameToLayer("Buildings");
 
-        // 🟦 DEBUG — ZVIDITELNĚNÍ KOSTIČKY
         MeshRenderer rend = box.GetComponent<MeshRenderer>();
         Material debugMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
 
-        debugMat.SetFloat("_Surface", 1);       // Transparent
-        debugMat.color = new Color(0f, 0f, 1f, 0.15f); // světle modrá, průhledná
+        debugMat.SetFloat("_Surface", 1);
+        debugMat.color = new Color(0f, 0f, 1f, 0.15f);
         debugMat.renderQueue = 3000;
 
         rend.material = debugMat;
@@ -111,11 +103,7 @@ public class BuildingClickOblet : MonoBehaviour {
     }
 
 
-    // =============================================================
-    //               GENERATE WAYPOINTS A LINIE
-    // =============================================================
     void GenerateCircularMission(Vector3 center) {
-        // vyčištění starých
         foreach (var r in waypointRenderers)
             Destroy(r.gameObject);
 
@@ -161,14 +149,10 @@ public class BuildingClickOblet : MonoBehaviour {
         }
     }
 
-
-    // =============================================================
-    //                REALTIME OCCLUSION
-    // =============================================================
     void LateUpdate() {
         Vector3 cam = arcgisCamera.transform.position;
 
-        // waypointy
+        // waypoints
         foreach (var r in waypointRenderers) {
             if (r == null)
                 continue;
@@ -181,7 +165,6 @@ public class BuildingClickOblet : MonoBehaviour {
             r.enabled = !hide;
         }
 
-        // linie
         foreach (var seg in lines) {
             if (seg.lr == null)
                 continue;
@@ -202,7 +185,6 @@ public class BuildingClickOblet : MonoBehaviour {
 
         List<Vector3> pts = new List<Vector3>();
 
-        // horizontální sampling 360°
         for (int i = 0; i < 36; i++) {
             float ang = i * 10f * Mathf.Deg2Rad;
             Vector3 dir = new Vector3(Mathf.Cos(ang), 0, Mathf.Sin(ang));
@@ -212,7 +194,6 @@ public class BuildingClickOblet : MonoBehaviour {
             }
         }
 
-        // vertikální ray nahoru a dolů (pro výšku)
         float minY = origin.y;
         float maxY = origin.y;
 
@@ -228,7 +209,6 @@ public class BuildingClickOblet : MonoBehaviour {
             return;
         }
 
-        // vypočítat AABB z nasbíraných bodů
         float minX = float.MaxValue, minZ = float.MaxValue;
         float maxX = float.MinValue, maxZ = float.MinValue;
 
@@ -242,7 +222,6 @@ public class BuildingClickOblet : MonoBehaviour {
         Vector3 center = new Vector3((minX + maxX) / 2f, (minY + maxY) / 2f, (minZ + maxZ) / 2f);
         Vector3 size = new Vector3(maxX - minX, maxY - minY, maxZ - minZ);
 
-        // vytvoření debug boxu
         GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
         box.name = "OccluderBox";
         box.transform.parent = missionParent;
