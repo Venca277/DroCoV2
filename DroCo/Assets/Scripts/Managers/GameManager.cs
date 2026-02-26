@@ -208,6 +208,12 @@ public class GameManager : Singleton<GameManager> {
         connectionBar.SetConnectionStatus(ConnectionStatus.Disconnected);
     }
 
+    public void HandleReceivedDroneData(DroneFlightData flightData) {
+        // Update flight data of connected drone
+        DroneManager.Instance.HandleReceivedDroneData(flightData);
+        GameObject.FindAnyObjectByType<ToolPanelControl>()?.RecordData(flightData);
+    }
+
     public void CenterMap(DroneFlightData flightData) {
         //modified - xsovakv00 11.2. 2026 - centering map after drone connects messes up with mission waypoints recalculation
         if (missionGenerator != null && missionGenerator.HasMission()) {

@@ -19,7 +19,7 @@ public class AircraftOrientation {
     public double roll;
     public double yaw;
     public double compass;
-    
+
     public override string ToString() {
         return $"{{pitch:{pitch}, roll:{roll}, yaw:{yaw}, compass:{compass}}}";
     }

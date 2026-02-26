@@ -50,6 +50,7 @@ public class DroneManager : Singleton<DroneManager> {
                 Drones[flightData.client_id].UpdateDroneFlightData(flightData);
             }
         } else { //prisla data s neznamym drone ID -> pozadame server o novy seznam dronu
+            Debug.LogWarning("UKNOWN DRONE ID: " + flightData.client_id);
             if (GameManager.Instance.CurrentAppMode == GameManager.AppMode.Client) {
                 WebSocketClient.Instance.SendDroneListRequest();
             }
@@ -92,6 +93,13 @@ public class DroneManager : Singleton<DroneManager> {
         foreach (KeyValuePair<string, Drone> drone in Drones) {
             drone.Value.DroneModel.gameObject.SetActive(active);
         }
+    }
+
+    public Vector3 GetFirstDronePosition() {
+        foreach (KeyValuePair<string, Drone> drone in Drones) {
+            return drone.Value.transform.position;
+        }
+        return Vector3.zero;
     }
 
     public void DestroyDroneAll() {

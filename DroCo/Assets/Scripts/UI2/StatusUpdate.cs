@@ -29,7 +29,8 @@ public class StatusUpdate : Singleton<StatusUpdate> {
     public Sprite statusOK;
 
     public void HandleStatusUpdate(DroneStatusData status) {
-        Debug.Log("Status update: " + status);
+        //Debug.Log("Status update: " + status);
+        //debug
 
         if (status == null) {
             Debug.LogWarning("Received null status data");

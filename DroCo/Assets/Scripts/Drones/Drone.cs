@@ -110,6 +110,7 @@ public class Drone : InteractiveObject, IPointerNotifier {
         if (!string.IsNullOrEmpty(flightData.frame)) {
             byte[] frame = Convert.FromBase64String(flightData.frame);
 
+            //old version displayed stream infornt of drone 
             JpegPlayerTexture.LoadImage(frame);
 
             if (ArCameraBackground != null) {
@@ -117,6 +118,10 @@ public class Drone : InteractiveObject, IPointerNotifier {
             }
             VideoScreen.material.mainTexture = JpegPlayerTexture;
             OcclusionMaterial.SetTexture("_CameraFeedTexture", JpegPlayerTexture);
+
+            //new way provides the stream into UI
+            //the same stream is delegated to UI toggable screen
+            GameObject.FindObjectOfType<ToolPanelControl>()?.UpdateFrame(frame);
         }
     }
 
