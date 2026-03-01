@@ -1,0 +1,195 @@
+using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+using System.Collections.Generic;
+using System.IO;
+
+public class MissionUI : MonoBehaviour {
+    public static MissionUI Instance {
+        get; private set;
+    }
+
+    [Header("Classes")]
+    public MissionGenerator generator;
+    public DroneMissionController droneMission;
+    public BuildingFetcher fetcher;
+
+    [Header("UI")]
+    public GameObject missionPanel;
+    public Transform content;
+    public Image missionImage;
+
+    [Header("Parameters")]
+    public TMP_InputField scanDist;
+    public TMP_InputField verticalStep;
+    public TMP_InputField tubeThickness;
+    public TMP_InputField waypointSize;
+    public TMP_Dropdown color;
+    public Toggle use3Dtubes;
+    public Toggle showGhost;
+    public TMP_Text coverage;
+
+    [Header("Action")]
+    public Button delete;
+    public Button save;
+
+    [Header("Icons")]
+    public Sprite missionON;
+    public Sprite missionOFF;
+
+    private GameObject currBuilding;
+    private List<Vector3> currFootprint;
+    private bool hasMission = false;
+
+    void Awake() {
+        if (Instance != null && Instance != this) {
+            Destroy(gameObject);
+            Destroy(this);
+        }
+        Instance = this;
+    }
+
+    private void Start() {
+        //InitializeUI
+        if (delete != null)
+            delete.onClick.AddListener(DeleteMission);
+        if (save != null)
+            save.onClick.AddListener(SaveMission);
+        if (scanDist != null)
+            scanDist.onValueChanged.AddListener(ScanDistChanged);
+        if (verticalStep != null)
+            verticalStep.onValueChanged.AddListener(VerticalStepChanged);
+        if (use3Dtubes != null)
+            use3Dtubes.onValueChanged.AddListener(Use3DTubesChanged);
+        if (showGhost != null)
+            showGhost.onValueChanged.AddListener(showGhostChanged);
+        if (color != null)
+            color.onValueChanged.AddListener(ColorChanged);
+        if (waypointSize != null)
+            waypointSize.onValueChanged.AddListener(WaypointSizeChanged);
+    }
+
+    public bool HasMission() {
+        return hasMission;
+    }
+
+    public void SetNewMission(GameObject building, List<Vector3> footprint) {
+        currBuilding = building;
+        currFootprint = footprint;
+        hasMission = true;
+        missionImage.sprite = missionON;
+
+
+        if (scanDist != null)
+            scanDist.text = generator.scanDistance.ToString();
+        if (verticalStep != null)
+            verticalStep.text = generator.verticalStep.ToString();
+        if (use3Dtubes != null)
+            use3Dtubes.isOn = generator.use3DTubes;
+        if (color != null)
+            SetColor();
+        if (tubeThickness != null)
+            tubeThickness.text = generator.tubeThickness.ToString();
+        if (waypointSize != null)
+            waypointSize.text = generator.waypointSize.ToString();
+    }
+
+    private void SetColor() {
+        if (color == null)
+            return;
+
+        color.options.Clear();
+        color.options.Add(new TMP_Dropdown.OptionData("Red"));
+        color.options.Add(new TMP_Dropdown.OptionData("Green"));
+        color.options.Add(new TMP_Dropdown.OptionData("Blue"));
+        color.options.Add(new TMP_Dropdown.OptionData("Yellow"));
+        color.options.Add(new TMP_Dropdown.OptionData("Cyan"));
+        color.options.Add(new TMP_Dropdown.OptionData("Magenta"));
+        color.value = 2;
+        color.RefreshShownValue();
+    }
+
+    private void DeleteMission() {
+        if (!hasMission)
+            return;
+
+        generator?.ClearPath();
+        //droneMission?.ClearSelection();
+        fetcher?.ClearSelection();
+
+        currBuilding = null;
+        currFootprint = null;
+        hasMission = false;
+        missionImage.sprite = missionOFF;
+        content.gameObject.SetActive(false);
+
+        /*
+        LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
+        if (transform.parent != null) {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(transform.parent as RectTransform);
+        }
+        */
+
+        Toast.call.Show("Mission deleted", 2.0f, false);
+    }
+
+    private void SaveMission() {
+        if (!hasMission)
+            return;
+
+        Toast.call.Show("Mission saved!", 2.0f, false);
+    }
+
+    private void RegenerateMission() {
+        if (!hasMission)
+            return;
+
+        generator?.ClearPath();
+        List<Vector3> newPath = generator.GenerateScanPath(currBuilding, currFootprint);
+        if (newPath != null && newPath.Count > 0) {
+            droneMission?.ProcessMission(currBuilding, currFootprint);
+            Debug.Log("Mission regenerated");
+        } else {
+            Toast.call.Show("Error regenerating mission", 2.0f, true);
+        }
+    }
+
+    private void ScanDistChanged(string value) {
+        if (float.TryParse(value, out float dist)) {
+            generator.scanDistance = dist;
+            RegenerateMission();
+        }
+    }
+
+    private void VerticalStepChanged(string value) {
+        if (float.TryParse(value, out float step)) {
+            generator.verticalStep = step;
+            RegenerateMission();
+        }
+    }
+
+    private void Use3DTubesChanged(bool value) {
+        generator.use3DTubes = value;
+        RegenerateMission();
+    }
+
+    private void ColorChanged(int index) {
+        Color[] colors = new Color[] { Color.red, Color.green, Color.blue, Color.yellow, Color.cyan, Color.magenta };
+        if (index < colors.Length) {
+            generator.pathColor = colors[index];
+            RegenerateMission();
+        }
+    }
+
+    private void showGhostChanged(bool value) {
+        fetcher.showGhost = value;
+        //generator.showGhost = value;
+    }
+
+    private void WaypointSizeChanged(string value) {
+        if (float.TryParse(value, out float size)) {
+            generator.waypointSize = size;
+            RegenerateMission();
+        }
+    }
+}

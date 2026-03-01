@@ -39,6 +39,11 @@ public class MissionGenerator : MonoBehaviour {
     public Sprite mapActiveIcon;
     public Sprite mapIcon;
 
+    [Header("Collision")]
+    public float droneRadius = 0.5f;
+    public LayerMask collisionLayer;
+    public float maxPush = 15.0f;
+
     private LineRenderer lineRenderer;
     private List<GameObject> spawnedObjects = new List<GameObject>();
 
@@ -91,6 +96,8 @@ public class MissionGenerator : MonoBehaviour {
         //helix generation
         List<Vector3> finalPath = new List<Vector3>();
         float currentY = startY;
+        Vector3 lastPoint = Vector3.zero;
+        bool isFirst = true;
 
         while (currentY < endY) {
             for (int i = 0; i < orbitRing.Count; i++) {
@@ -102,8 +109,20 @@ public class MissionGenerator : MonoBehaviour {
                     break;
 
                 Vector3 pt = orbitRing[i];
-                Vector3 waypointPos = new Vector3(pt.x, actualY, pt.z);
-                finalPath.Add(waypointPos);
+                Vector3 propPos = new Vector3(pt.x, actualY, pt.z);
+
+                Vector3 currCenter = new Vector3(centroid.x, actualY, centroid.z);
+                Vector3 pushDir = (propPos - currCenter).normalized;
+
+                Vector3 noCollisionPos = SolveCollision(propPos, pushDir);
+
+                if (!isFirst) {
+                    noCollisionPos = SolveSightline(lastPoint, noCollisionPos, pushDir);
+                }
+
+                finalPath.Add(noCollisionPos);
+                lastPoint = noCollisionPos;
+                isFirst = false;
             }
             currentY += verticalStep;
         }
@@ -111,9 +130,43 @@ public class MissionGenerator : MonoBehaviour {
         //renderer
         VisualizePath(finalPath);
 
-        AddMissionToUI();
+        //AddMissionToUI();
         //return unity coords
         return finalPath;
+    }
+
+    private Vector3 SolveCollision(Vector3 targetpos, Vector3 pushDir) {
+        Vector3 curr = targetpos;
+        float pushed = 0.0f;
+        float step = 0.5f;
+
+        while (Physics.CheckSphere(curr, droneRadius, collisionLayer)) {
+            curr += pushDir * step;
+            pushed += step;
+
+            if (pushed > maxPush) {
+                Debug.LogWarning("Max push exceeded, returning original position");
+                return targetpos + new Vector3(0, maxPush, 0);
+            }
+        }
+        return curr;
+    }
+
+    private Vector3 SolveSightline(Vector3 prevPoint, Vector3 currPoint, Vector3 pushDir) {
+        Vector3 finPoint = currPoint;
+        float pushed = 0.0f;
+        float step = 0.5f;
+
+        while (Physics.Linecast(prevPoint, finPoint, collisionLayer)) {
+            finPoint += pushDir * step;
+            pushed += step;
+
+            if (pushed > maxPush) {
+                Debug.LogWarning("Max push exceeded in sightline, returning current position");
+                return currPoint + new Vector3(0, maxPush, 0);
+            }
+        }
+        return finPoint;
     }
 
     public List<GPSWaypoint> ConvertToGPSCoordinates(List<Vector3> unityPath) {

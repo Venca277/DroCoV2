@@ -21,13 +21,9 @@ public class SimpleAccordion : MonoBehaviour {
                 Toast.call.Show("No drones connected", 2.0f, false);
             }
         } else if (contentObject.transform.parent.name == "MissionsListContainer") {
-            MissionGenerator missionGenerator = FindObjectOfType<MissionGenerator>();
-            if (missionGenerator == null) {
-                return;
-            }
-            if (missionGenerator.HasMission())
+            if (MissionUI.Instance != null && MissionUI.Instance.HasMission()) {
                 contentObject.SetActive(!currentState);
-            else
+            } else
                 Toast.call.Show("No mission selected", 2.0f, false);
         }
 

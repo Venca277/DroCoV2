@@ -15,7 +15,8 @@ public class BuildingFetcher : MonoBehaviour {
     public ArcGISMapComponent map;
     public MissionGenerator missionGenerator;
     public DroneMissionController missionController;
-    public Button launchMissionButton;
+    //public Button launchMissionButton;
+    public bool showGhost = false;
 
     private float lastClickTime = 0f;
     private float doubleClickThreshold = 0.25f;
@@ -25,9 +26,11 @@ public class BuildingFetcher : MonoBehaviour {
     private List<Vector3> buildingWorldPoints = null;
 
     private void Awake() {
+        /*
         if (launchMissionButton != null) {
             launchMissionButton.interactable = false;
         }
+        */
     }
 
     private void Update() {
@@ -107,6 +110,33 @@ public class BuildingFetcher : MonoBehaviour {
             missionGenerator.ClearPath();
     }
 
+    private float GetAltitudeFromCast(Vector3 center) {
+        Vector3 highPlace = new Vector3(center.x, 42069f, center.z);
+        Ray down = new Ray(highPlace, Vector3.down);
+
+        int layer = LayerMask.GetMask("Default");
+        RaycastHit[] hits = Physics.RaycastAll(down, 100000f, layer);
+        if (hits.Length == 0) {
+            Debug.LogWarning("No hit on ground!");
+            return 0f;
+        }
+
+        RaycastHit lowest = hits[0];
+        float lowestY = lowest.point.y;
+
+        foreach (var hit in hits) {
+            if (hit.point.y < lowestY) {
+                lowest = hit;
+                lowestY = hit.point.y;
+            }
+        }
+
+        ArcGISPoint ground = map.EngineToGeographic(lowest.point);
+        float alt = (float) ground.Z;
+        Debug.Log($"Ground: {alt}m");
+        return alt;
+    }
+
     private float GetRealHeight(OSMElement building) {
         //TODO: think of more specific way to determine average floor height
         //perhaps get (hight of building arcgis model)/(floor count) = avg. floor height
@@ -148,10 +178,21 @@ public class BuildingFetcher : MonoBehaviour {
             centroidSeaLevel += wp;
         centroidSeaLevel /= worldPoints.Count;
 
+        float groundAlt = GetAltitudeFromCast(centroidSeaLevel);
+        Debug.Log("Ground: " + groundAlt);
+
+        float osmHeight = GetRealHeight(buildingData);
+        if (osmHeight < 5f)
+            osmHeight = 15f;
+        Debug.Log("OSM Height: " + osmHeight);
+
+
+        float roof = groundAlt + osmHeight;
+
         // geolocation of the object
-        ArcGISPoint objMiddle = map.EngineToGeographic(centroidSeaLevel);
-        ArcGISPoint objPivot = new ArcGISPoint(objMiddle.X, objMiddle.Y, roofAltitudeFromRay, objMiddle.SpatialReference);
-        Vector3 unityRelPos = map.GeographicToEngine(objPivot);
+        ArcGISPoint objMid = map.EngineToGeographic(centroidSeaLevel);
+        ArcGISPoint objPiv = new ArcGISPoint(objMid.X, objMid.Y, roof, objMid.SpatialReference);
+        Vector3 relative = map.GeographicToEngine(objPiv);
 
         // gameobject reconstruction
         currentSelection = new GameObject($"OSM_Selection_{buildingData.id}");
@@ -160,7 +201,7 @@ public class BuildingFetcher : MonoBehaviour {
             buildingObj.transform.SetParent(map.transform, true);
 
         //place the object at relative position
-        buildingObj.transform.position = unityRelPos;
+        buildingObj.transform.position = relative;
 
         int layer = LayerMask.NameToLayer("Buildings");
         //buildingObj.layer = (layer != -1) ? layer : 0;
@@ -170,7 +211,7 @@ public class BuildingFetcher : MonoBehaviour {
             buildingObj.layer = 0;
 
         var locationComponent = buildingObj.AddComponent<ArcGISLocationComponent>();
-        locationComponent.Position = objPivot;
+        locationComponent.Position = objPiv;
         locationComponent.Rotation = new ArcGISRotation(0, 90, 0);
         locationComponent.enabled = true;
 
@@ -184,9 +225,6 @@ public class BuildingFetcher : MonoBehaviour {
         //int n = worldPoints.Count;
         Vector3[] verts = new Vector3[worldPoints.Count * 2];
 
-        float osmHeight = GetRealHeight(buildingData);
-        if (osmHeight < 5f)
-            osmHeight = 15f;
 
         float topY = 0.5f;
         float bottomY = -osmHeight;
@@ -236,11 +274,11 @@ public class BuildingFetcher : MonoBehaviour {
         col.sharedMesh = mesh;
 
         //enable the ghost
-        mr.enabled = false;
+        mr.enabled = showGhost;
 
         //===========================================
-        /*
-        
+
+
         Shader buildingShader = Shader.Find("Universal Render Pipeline/Lit");
         if (buildingShader == null) {
             buildingShader = Shader.Find("Universal Render Pipeline/UnLit");
@@ -262,9 +300,9 @@ public class BuildingFetcher : MonoBehaviour {
 
         mr.material = buildingMat;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        
+
         // ==========================================
-        */
+
 
         // highlight floor object
         GameObject floorObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -317,12 +355,15 @@ public class BuildingFetcher : MonoBehaviour {
         buildingObjectReady = buildingObj;
         buildingWorldPoints = worldPoints;
         missionController.ProcessMission(buildingObjectReady, buildingWorldPoints);
-        UpdateButtonState();
+        //UpdateButtonState();
+        MissionUI.Instance?.SetNewMission(buildingObjectReady, buildingWorldPoints);
     }
 
+    /*
     private void UpdateButtonState() {
         if (launchMissionButton != null) {
             launchMissionButton.interactable = true;
         }
     }
+    */
 }

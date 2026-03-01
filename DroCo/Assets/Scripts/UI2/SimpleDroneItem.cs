@@ -8,9 +8,7 @@ public class SimpleDroneItem : MonoBehaviour {
     public Image statusDot;
     public Image droneIcon;
 
-    // Tuhle funkci zavola UnitList, kdyz vytvari radek
-    public void Setup(string name, Color groupColor, Sprite icon) // muzes pridat i Sprite icon
-    {
+    public void Setup(string name, Color groupColor, Sprite icon) {
         droneNameText.text = name;
         statusDot.color = groupColor;
         droneIcon.sprite = icon;
