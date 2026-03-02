@@ -8,6 +8,7 @@ using UnityEngine.UI;
 using System.Globalization;
 using Newtonsoft.Json;
 using System;
+using UnityEngine.EventSystems;
 
 public class BuildingFetcher : MonoBehaviour {
     public Camera arcgisCamera;
@@ -48,6 +49,10 @@ public class BuildingFetcher : MonoBehaviour {
 
             if (!Physics.Raycast(ray, out RaycastHit hit, 1000f))
                 return;
+
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) {
+                return;
+            }
 
             //convert to geocoordinates
             ArcGISPoint geo = map.EngineToGeographic(hit.point);

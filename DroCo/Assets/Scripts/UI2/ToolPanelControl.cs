@@ -46,7 +46,7 @@ public class ToolPanelControl : MonoBehaviour {
     void Start() {
         rectTransform = stream.GetComponent<RectTransform>();
         smallposition = rectTransform.anchoredPosition;
-
+        Debug.LogError(Application.persistentDataPath);
 
         streamTexture = new Texture2D(2, 2);
         stream.texture = streamTexture;

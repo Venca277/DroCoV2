@@ -90,7 +90,12 @@ public class MissionGenerator : MonoBehaviour {
             Vector3 pointFlat = new Vector3(p.x, 0, p.z);
             Vector3 dir = (pointFlat - centroid).normalized;
             Vector3 offsetPoint = pointFlat + (dir * scanDistance);
-            orbitRing.Add(offsetPoint);
+            if (orbitRing.Count == 0 || Vector3.Distance(offsetPoint, orbitRing[orbitRing.Count - 1]) > 0.1f)
+                orbitRing.Add(offsetPoint);
+        }
+
+        if (orbitRing.Count > 1 && Vector3.Distance(orbitRing[0], orbitRing[orbitRing.Count - 1]) < 0.1f) {
+            orbitRing.RemoveAt(orbitRing.Count - 1);
         }
 
         //helix generation
@@ -116,13 +121,23 @@ public class MissionGenerator : MonoBehaviour {
 
                 Vector3 noCollisionPos = SolveCollision(propPos, pushDir);
 
-                if (!isFirst) {
-                    noCollisionPos = SolveSightline(lastPoint, noCollisionPos, pushDir);
+                if (!isFirst && Vector3.Distance(lastPoint, noCollisionPos) < 0.2f) {
+                    continue;
                 }
 
-                finalPath.Add(noCollisionPos);
-                lastPoint = noCollisionPos;
-                isFirst = false;
+                if (!isFirst) {
+                    List<Vector3> sightPoints = SolveSightline(lastPoint, noCollisionPos, pushDir);
+                    finalPath.AddRange(sightPoints);
+                    lastPoint = sightPoints[sightPoints.Count - 1];
+                } else {
+                    finalPath.Add(noCollisionPos);
+                    lastPoint = noCollisionPos;
+                    isFirst = false;
+                }
+
+                //finalPath.Add(noCollisionPos);
+                //lastPoint = noCollisionPos;
+                //isFirst = false;
             }
             currentY += verticalStep;
         }
@@ -139,34 +154,97 @@ public class MissionGenerator : MonoBehaviour {
         Vector3 curr = targetpos;
         float pushed = 0.0f;
         float step = 0.5f;
+        float maxHorizPush = 3.0f;
 
-        while (Physics.CheckSphere(curr, droneRadius, collisionLayer)) {
+        while (isPosBlocked(curr)) {
             curr += pushDir * step;
             pushed += step;
 
-            if (pushed > maxPush) {
+            if (pushed > maxHorizPush) {
                 Debug.LogWarning("Max push exceeded, returning original position");
-                return targetpos + new Vector3(0, maxPush, 0);
+                return findSafeAlt(targetpos);
             }
         }
         return curr;
     }
 
-    private Vector3 SolveSightline(Vector3 prevPoint, Vector3 currPoint, Vector3 pushDir) {
-        Vector3 finPoint = currPoint;
-        float pushed = 0.0f;
-        float step = 0.5f;
+    private Vector3 findSafeAlt(Vector3 pos) {
+        Vector3 sky = new Vector3(pos.x, pos.y + 100.0f, pos.z);
+        RaycastHit hit;
 
-        while (Physics.Linecast(prevPoint, finPoint, collisionLayer)) {
-            finPoint += pushDir * step;
-            pushed += step;
+        if (Physics.Raycast(sky, Vector3.down, out hit, 200f, collisionLayer)) {
+            float safeY = hit.point.y + droneRadius + 1.0f;
 
-            if (pushed > maxPush) {
-                Debug.LogWarning("Max push exceeded in sightline, returning current position");
-                return currPoint + new Vector3(0, maxPush, 0);
+            safeY = Mathf.Max(safeY, pos.y);
+
+            return new Vector3(pos.x, safeY, pos.z);
+        }
+
+        return pos;
+    }
+
+    private float getHighestAlt(Vector3 prevPoint, Vector3 currPoint) {
+        float highest = Mathf.Max(prevPoint.y, currPoint.y);
+        float dist = Vector3.Distance(prevPoint, currPoint);
+
+        int steps = Mathf.Max(1, Mathf.CeilToInt(dist / 0.5f));
+
+        for (int i = 1; i < steps; i++) {
+            float t = (float) i / steps;
+            Vector3 pos = Vector3.Lerp(prevPoint, currPoint, t);
+
+            float alt = findSafeAlt(pos).y;
+            if (alt > highest) {
+                highest = alt;
             }
         }
-        return finPoint;
+        return highest;
+    }
+
+    private bool isPosBlocked(Vector3 pos) {
+        if (Physics.CheckSphere(pos, droneRadius, collisionLayer)) {
+            return true;
+        }
+
+        Vector3 sky = new Vector3(pos.x, pos.y + 100.0f, pos.z);
+        if (Physics.Linecast(sky, pos, collisionLayer)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private List<Vector3> SolveSightline(Vector3 prevPoint, Vector3 currPoint, Vector3 pushDir) {
+        List<Vector3> segPoints = new List<Vector3>();
+        Vector3 finPoint = currPoint;
+        RaycastHit hit;
+        //float pushed = 0.0f;
+        //float step = 0.5f;
+
+        Vector3 dir = finPoint - prevPoint;
+        float dist = dir.magnitude;
+
+        if (dist > 0.1f && Physics.SphereCast(prevPoint, droneRadius, dir.normalized, out hit, dist, collisionLayer)) {
+            float safeAlt = getHighestAlt(prevPoint, currPoint);
+            Vector3 risePoint = new Vector3(prevPoint.x, safeAlt, prevPoint.z);
+
+            if (Vector3.Distance(prevPoint, risePoint) > 0.1f) {
+                segPoints.Add(risePoint);
+            }
+
+            Vector3 dropPoint = new Vector3(currPoint.x, safeAlt, currPoint.z);
+            if (Vector3.Distance(risePoint, dropPoint) > 0.1f) {
+                segPoints.Add(dropPoint);
+            }
+
+            if (Vector3.Distance(dropPoint, currPoint) > 0.1f) {
+                segPoints.Add(currPoint);
+            }
+        } else {
+            segPoints.Add(currPoint);
+        }
+
+        return segPoints;
     }
 
     public List<GPSWaypoint> ConvertToGPSCoordinates(List<Vector3> unityPath) {

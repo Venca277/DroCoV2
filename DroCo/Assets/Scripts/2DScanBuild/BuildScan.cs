@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Esri.GameEngine.Map;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public class BuildingClickOblet : MonoBehaviour {
     [SerializeField] private Camera arcgisCamera;
@@ -25,83 +26,23 @@ public class BuildingClickOblet : MonoBehaviour {
 
     void Update() {
         if (Input.GetMouseButtonDown(0)) {
+
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) {
+                return;
+            }
             float delta = Time.time - lastClick;
             lastClick = Time.time;
 
             if (delta <= doubleClickTime) {
                 Ray ray = arcgisCamera.ScreenPointToRay(Input.mousePosition);
                 if (Physics.Raycast(ray, out var hit, 500f)) {
-                    CreateOccluderBoxFromHit(hit);
+                    //CreateOccluderBoxFromHit(hit);
 
-                    GenerateCircularMission(hit.point);
+                    //GenerateCircularMission(hit.point);
                 }
             }
         }
     }
-
-    void CreateOccluderBox(Vector3 center) {
-        float maxDistance = 200f;
-
-        Vector3[] dirs = {
-        Vector3.right,
-        Vector3.left,
-        Vector3.forward,
-        Vector3.back,
-        Vector3.up,
-        Vector3.down
-    };
-
-        float minX = center.x, maxX = center.x;
-        float minZ = center.z, maxZ = center.z;
-        float minY = center.y, maxY = center.y;
-
-        foreach (var d in dirs) {
-            if (Physics.Raycast(center, d, out RaycastHit hit, maxDistance)) {
-                Vector3 p = hit.point;
-
-                minX = Mathf.Min(minX, p.x);
-                maxX = Mathf.Max(maxX, p.x);
-
-                minZ = Mathf.Min(minZ, p.z);
-                maxZ = Mathf.Max(maxZ, p.z);
-
-                minY = Mathf.Min(minY, p.y);
-                maxY = Mathf.Max(maxY, p.y);
-            }
-        }
-
-        Vector3 size = new Vector3(
-            Mathf.Abs(maxX - minX),
-            Mathf.Abs(maxY - minY),
-            Mathf.Abs(maxZ - minZ)
-        );
-
-        Vector3 pos = new Vector3(
-            (minX + maxX) / 2f,
-            (minY + maxY) / 2f,
-            (minZ + maxZ) / 2f
-        );
-
-        GameObject box = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        box.name = "OccluderBox";
-        box.transform.parent = missionParent;
-        box.transform.position = pos;
-        box.transform.localScale = size;
-
-        box.layer = LayerMask.NameToLayer("Buildings");
-
-        MeshRenderer rend = box.GetComponent<MeshRenderer>();
-        Material debugMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-
-        debugMat.SetFloat("_Surface", 1);
-        debugMat.color = new Color(0f, 0f, 1f, 0.15f);
-        debugMat.renderQueue = 3000;
-
-        rend.material = debugMat;
-
-        occluders.Add(box);
-    }
-
 
     void GenerateCircularMission(Vector3 center) {
         foreach (var r in waypointRenderers)
@@ -238,7 +179,4 @@ public class BuildingClickOblet : MonoBehaviour {
 
         box.layer = LayerMask.NameToLayer("Buildings");
     }
-
-
-
 }
