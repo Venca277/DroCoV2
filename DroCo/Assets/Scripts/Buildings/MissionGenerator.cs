@@ -36,6 +36,7 @@ public class MissionGenerator : MonoBehaviour {
 
     [Header("Waypoints")]
     public GameObject waypointPrefab;
+    public GameObject waypointUIPrefab;
     public float waypointSize = 0.3f;
 
     [Header("Icons")]
@@ -482,5 +483,9 @@ public class MissionGenerator : MonoBehaviour {
         } else {
             Debug.LogWarning("couldnt find header image");
         }
+    }
+
+    private void selectedUIWaypoint(GameObject clickedWP) {
+        //TODO select the waypoint
     }
 }

@@ -39,6 +39,9 @@ public class DroneManager : Singleton<DroneManager> {
             Drones.Remove(droneId);
             Destroy(droneToBeRemoved.gameObject);
         }
+
+        // Update Start button state when drone list changes
+        StatusUpdate.Instance?.UpdateStartButton();
     }
 
     public void HandleReceivedDroneData(DroneFlightData flightData) {
@@ -107,6 +110,9 @@ public class DroneManager : Singleton<DroneManager> {
             DestroyDrone(drone.Value);
         }
         Drones.Clear();
+
+        // Update Start button state when all drones are destroyed
+        StatusUpdate.Instance?.UpdateStartButton();
     }
 
     public void DestroyDrone(Drone drone) {

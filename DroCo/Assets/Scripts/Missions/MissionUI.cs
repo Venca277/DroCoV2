@@ -19,6 +19,9 @@ public class MissionUI : MonoBehaviour {
     public GameObject missionPanel;
     public Transform content;
     public Image missionImage;
+    public Button startMissionButton;
+    public Transform waypointContent;
+    public GameObject waypointUIPrefab;
 
     [Header("Parameters")]
     public TMP_InputField scanDist;
@@ -79,6 +82,8 @@ public class MissionUI : MonoBehaviour {
         currFootprint = footprint;
         hasMission = true;
         missionImage.sprite = missionON;
+        startMissionButton.enabled = true;
+        startMissionButton.interactable = true;
 
 
         if (scanDist != null)
@@ -93,6 +98,8 @@ public class MissionUI : MonoBehaviour {
             tubeThickness.text = generator.tubeThickness.ToString();
         if (waypointSize != null)
             waypointSize.text = generator.waypointSize.ToString();
+
+        RefreshList();
     }
 
     private void SetColor() {
@@ -123,6 +130,8 @@ public class MissionUI : MonoBehaviour {
         hasMission = false;
         missionImage.sprite = missionOFF;
         content.gameObject.SetActive(false);
+        startMissionButton.enabled = false;
+        startMissionButton.interactable = false;
 
         //simpleaccordion doesnt work
         //we had to force update
@@ -134,7 +143,6 @@ public class MissionUI : MonoBehaviour {
 
         Toast.call.Show("Mission deleted", 2.0f, false);
     }
-
     private void SaveMission() {
         if (!hasMission)
             return;
@@ -151,6 +159,7 @@ public class MissionUI : MonoBehaviour {
         if (newPath != null && newPath.Count > 0) {
             droneMission?.ProcessMission(currBuilding, currFootprint);
             Debug.Log("Mission regenerated");
+            RefreshList();
         } else {
             Toast.call.Show("Error regenerating mission", 2.0f, true);
         }
@@ -193,5 +202,70 @@ public class MissionUI : MonoBehaviour {
             generator.waypointSize = size;
             RegenerateMission();
         }
+    }
+
+    private void RefreshList() {
+        if (waypointContent == null || waypointUIPrefab == null)
+            return;
+
+        foreach (Transform child in waypointContent) {
+            Destroy(child.gameObject);
+        }
+
+        foreach (GameObject wp in generator.tubeMap.Keys) {
+            if (wp == null)
+                continue;
+
+            GameObject wpObj = Instantiate(waypointUIPrefab, waypointContent);
+            wpObj.transform.localScale = Vector3.one;
+
+            TMP_Text label = wpObj.GetComponentInChildren<TMP_Text>();
+            if (label != null) {
+                label.text = wp.name;
+            }
+
+            Button btn = wpObj.GetComponent<Button>();
+            if (btn != null) {
+                GameObject clickedWP = wp;
+                btn.onClick.AddListener(() => selectedUIWaypoint(clickedWP));
+            }
+        }
+
+        if (waypointContent.gameObject.activeInHierarchy) {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(waypointContent.GetComponent<RectTransform>());
+        }
+    }
+
+    public void selectedUIWaypoint(GameObject wp) {
+        if (Camera.main != null) {
+            Camera.main.transform.position = wp.transform.position + new Vector3(0, 5, -10);
+            Camera.main.transform.LookAt(wp.transform);
+        }
+        StartCoroutine(shineWp(wp));
+    }
+
+    private IEnumerator shineWp(GameObject wp) {
+        Renderer renderer = wp.GetComponent<Renderer>();
+        if (renderer == null) {
+            Debug.LogWarning("Waypoint has no Renderer");
+            yield break;
+        }
+        Material mat = renderer.material;
+        Color origColor = mat.color;
+        mat.EnableKeyword("_EMISSION"); //shiner
+        float time = 2f;
+        float done = 0f;
+        Color c = new Color(0f, 1f, 1f);
+
+        while (done < time) {
+            done += Time.deltaTime;
+            float t = Mathf.PingPong(done * 2f, 1f);
+            Color em = c * (t * 10f);
+            mat.SetColor("_EmissionColor", em);
+            yield return null;
+        }
+        mat.color = origColor;
+        mat.DisableKeyword("_EMISSION");
+        mat.SetColor("_EmissionColor", Color.black);
     }
 }

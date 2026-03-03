@@ -28,6 +28,39 @@ public class StatusUpdate : Singleton<StatusUpdate> {
     public Sprite warningCompass;
     public Sprite statusOK;
 
+    public void UpdateStartButton() {
+        GameObject topbar = GameObject.Find("TopBar");
+        if (topbar == null) {
+            Debug.LogWarning("UpdateStartButton: Could not find TopBar");
+            return;
+        }
+
+        // Try to find Start button in different possible locations
+        Transform startTransform = topbar.transform.Find("Start");
+        if (startTransform == null) startTransform = topbar.transform.Find("StartButton");
+        if (startTransform == null) startTransform = topbar.transform.Find("Right/Start");
+        if (startTransform == null) startTransform = topbar.transform.Find("stroke/Start");
+        if (startTransform == null) startTransform = topbar.transform.Find("Left/Start");
+
+        if (startTransform == null) {
+            Debug.LogWarning("UpdateStartButton: Could not find Start button in TopBar");
+            return;
+        }
+
+        Button startButton = startTransform.GetComponent<Button>();
+        if (startButton == null) {
+            Debug.LogWarning("UpdateStartButton: Start button has no Button component");
+            return;
+        }
+
+        // Check if mission exists and drone is connected
+        bool hasMission = MissionUI.Instance != null && MissionUI.Instance.HasMission();
+        bool hasDrone = DroneManager.Instance != null && DroneManager.Instance.Drones.Count > 0;
+
+        startButton.interactable = hasMission && hasDrone;
+        Debug.Log($"UpdateStartButton: hasMission={hasMission}, hasDrone={hasDrone}, interactable={startButton.interactable}");
+    }
+
     public void HandleStatusUpdate(DroneStatusData status) {
         //Debug.Log("Status update: " + status);
         //debug
