@@ -62,6 +62,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         if (Input.GetMouseButtonUp(0)) {
             if (draggingArrow == ArrowType.XZ_PLANE) {
                 hideCol(); //hide col after dragging
+                ResetHighlight(diskGraphic);
             }
             draggingArrow = null;
         }
@@ -121,10 +122,8 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
 
         //set color and material
         Material ringMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-        ringMaterial.color = new Color(1f, 1f, 0f, 1f);
+        ringMaterial.color = new Color(0f, 1f, 1f, 1f);
         ringMaterial.SetInt("_Cull", 0); //both side to render
-        ringMaterial.EnableKeyword("_EMISSION");
-        ringMaterial.SetColor("_EmissionColor", new Color(0.5f, 0.5f, 0f, 1f));
 
         meshR.material = ringMaterial;
 
@@ -283,7 +282,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             SetHighlight(ygrafic, Color.green);
         } else {
             planeNormal = Vector3.up;
-            SetHighlight(diskGraphic, Color.yellow);
+            SetHighlight(diskGraphic, Color.cyan);
             showCol(); //show col only in drag
         }
 
@@ -413,7 +412,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         foreach (Renderer g in grafics) {
             Material mat = g.material;
             mat.EnableKeyword("_EMISSION");
-            mat.SetColor("_EmissionColor", color * 30f);
+            mat.SetColor("_EmissionColor", color * 10f);
         }
     }
 }

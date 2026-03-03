@@ -43,7 +43,18 @@ public class MissionEditor : MonoBehaviour {
 
         //drag after selected
         if (Input.GetMouseButtonDown(0) && selectedWaypoints.Count > 0) {
-            Dragging();
+            Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
+            RaycastHit[] hits = Physics.RaycastAll(ray, 500f, manipLayer);
+            bool hitWp = false;
+            foreach (var hit in hits) {
+                WaypointSelect wp = hit.transform.GetComponent<WaypointSelect>();
+                if (wp != null && selectedWaypoints.Contains(wp)) {
+                    hitWp = true;
+                    break;
+                }
+            }
+            if (hitWp)
+                Dragging();
         }
 
         //deselect all with right click

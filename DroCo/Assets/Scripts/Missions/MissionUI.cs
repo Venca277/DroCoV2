@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using System.IO;
+using System.Collections;
 
 public class MissionUI : MonoBehaviour {
     public static MissionUI Instance {
@@ -123,12 +124,13 @@ public class MissionUI : MonoBehaviour {
         missionImage.sprite = missionOFF;
         content.gameObject.SetActive(false);
 
-        /*
-        LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform);
-        if (transform.parent != null) {
-            LayoutRebuilder.ForceRebuildLayoutImmediate(transform.parent as RectTransform);
+        //simpleaccordion doesnt work
+        //we had to force update
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content.parent as RectTransform);
+        if (content.parent.parent != null) {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(content.parent.parent as RectTransform);
         }
-        */
 
         Toast.call.Show("Mission deleted", 2.0f, false);
     }
