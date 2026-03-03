@@ -4078,6 +4078,7 @@ MonoBehaviour:
   mapComponent: {fileID: 1192607889}
   scanDistance: 3
   verticalStep: 2.5
+  maxSegmentLen: 6
   use3DTubes: 1
   pathColor: {r: 0, g: 0.34628844, b: 1, a: 1}
   tubeThickness: 0.2
@@ -9912,6 +9913,7 @@ MonoBehaviour:
   manipLayer:
     serializedVersion: 2
     m_Bits: 4096
+  missionGenerator: {fileID: 452451342}
   gizmoPrefab: {fileID: 0}
   dragUI: 0
 --- !u!114 &980948412

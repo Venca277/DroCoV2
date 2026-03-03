@@ -26,6 +26,9 @@ public class MissionGenerator : MonoBehaviour {
     [Tooltip("Vertical step")]
     public float verticalStep = 1.5f;
 
+    [Tooltip("Length of segments")]
+    public float maxSegmentLen = 6.0f;
+
     [Header("Path visual")]
     public bool use3DTubes = true;
     public Color pathColor = Color.blue;
@@ -46,6 +49,7 @@ public class MissionGenerator : MonoBehaviour {
 
     private LineRenderer lineRenderer;
     private List<GameObject> spawnedObjects = new List<GameObject>();
+    public Dictionary<GameObject, List<GameObject>> tubeMap = new Dictionary<GameObject, List<GameObject>>();
 
     void Awake() {
         lineRenderer = GetComponent<LineRenderer>();
@@ -86,6 +90,61 @@ public class MissionGenerator : MonoBehaviour {
         centroid /= footprintPoints.Count;
         centroid.y = 0;
 
+        List<Vector3> sepFootprint = new List<Vector3>();
+        for (int i = 0; i < footprintPoints.Count; i++) {
+            Vector3 p1 = footprintPoints[i];
+            int k = i + 1;
+            if (k >= footprintPoints.Count)
+                k = 0;
+            Vector3 p2 = footprintPoints[k];
+            p1.y = 0;
+            p2.y = 0;
+
+            sepFootprint.Add(p1);
+
+            float dist = Vector3.Distance(p1, p2);
+            float maxSeg = maxSegmentLen;
+
+            if (dist > maxSeg) {
+                int steps = Mathf.CeilToInt(dist / maxSeg);
+                for (int j = 1; j < steps; j++) {
+                    sepFootprint.Add(Vector3.Lerp(p1, p2, (float) j / steps));
+                }
+            }
+        }
+
+        for (int i = 0; i < sepFootprint.Count; i++) {
+            Vector3 curr = sepFootprint[i];
+            Vector3 prev = sepFootprint[(i - 1 + sepFootprint.Count) % sepFootprint.Count];
+            Vector3 next = sepFootprint[(i + 1) % sepFootprint.Count];
+
+            //vectors of the walls
+            Vector3 dirPrev = (curr - prev).normalized;
+            Vector3 dirNext = (next - curr).normalized;
+
+            //perpendicular vects
+            Vector3 normPrev = new Vector3(-dirPrev.z, 0, dirPrev.x);
+            if (Vector3.Dot(normPrev, curr - centroid) < 0)
+                normPrev = -normPrev; //point out always
+
+            Vector3 normNext = new Vector3(-dirNext.z, 0, dirNext.x);
+            if (Vector3.Dot(normNext, curr - centroid) < 0)
+                normNext = -normNext;
+
+            //average normal for the vertex
+            Vector3 vertexNormal = (normPrev + normNext).normalized;
+            if (vertexNormal == Vector3.zero)
+                vertexNormal = normPrev;
+
+            //move the offset of scandist
+            Vector3 offsetPoint = curr + (vertexNormal * scanDistance);
+
+            if (orbitRing.Count == 0 || Vector3.Distance(offsetPoint, orbitRing[orbitRing.Count - 1]) > 0.1f) {
+                orbitRing.Add(offsetPoint);
+            }
+        }
+
+        /*
         foreach (var p in footprintPoints) {
             Vector3 pointFlat = new Vector3(p.x, 0, p.z);
             Vector3 dir = (pointFlat - centroid).normalized;
@@ -97,6 +156,7 @@ public class MissionGenerator : MonoBehaviour {
         if (orbitRing.Count > 1 && Vector3.Distance(orbitRing[0], orbitRing[orbitRing.Count - 1]) < 0.1f) {
             orbitRing.RemoveAt(orbitRing.Count - 1);
         }
+        */
 
         //helix generation
         List<Vector3> finalPath = new List<Vector3>();
@@ -281,16 +341,25 @@ public class MissionGenerator : MonoBehaviour {
             lineRenderer.SetPositions(path.ToArray());
         }
 
+        GameObject prevP = null;
+
         for (int i = 0; i < path.Count; i++) {
             Vector3 currentPos = path[i];
-            CreateWaypointMarker(currentPos, i);
-            if (use3DTubes && i < path.Count - 1) {
-                CreateTubeSegment(currentPos, path[i + 1]);
+
+            GameObject currP = CreateWaypointMarker(currentPos, i);
+            tubeMap[currP] = new List<GameObject>();
+
+            if (use3DTubes && i > 0) {
+                GameObject tube = CreateTubeSegment(path[i - 1], currentPos, i - 1);
+
+                tubeMap[currP].Add(tube);
+                tubeMap[prevP].Add(tube);
             }
+            prevP = currP;
         }
     }
 
-    private void CreateWaypointMarker(Vector3 pos, int index) {
+    private GameObject CreateWaypointMarker(Vector3 pos, int index) {
         GameObject wpObj;
         if (waypointPrefab != null) {
             wpObj = Instantiate(waypointPrefab, pos, Quaternion.identity);
@@ -310,17 +379,19 @@ public class MissionGenerator : MonoBehaviour {
         int layerIndex = LayerMask.NameToLayer("Mission");
         wpObj.layer = (layerIndex != -1) ? layerIndex : 0;
         spawnedObjects.Add(wpObj);
+        return wpObj;
     }
 
-    private void CreateTubeSegment(Vector3 start, Vector3 end) {
+    private GameObject CreateTubeSegment(Vector3 start, Vector3 end, int index) {
         GameObject tube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        tube.name = "Tube_Segment";
+        tube.name = "Tube_Segment_" + index;
         Collider col = tube.GetComponent<Collider>();
         if (col != null) {
-            col.enabled = true;
+            //TODO will set to off later
+            col.enabled = false;
             col.isTrigger = false;
         } else {
-            Debug.LogWarning("Tube nemá collider!");
+            Debug.LogWarning("Doesn't have collider!");
         }
 
         int layerIndex = LayerMask.NameToLayer("Mission");
@@ -341,6 +412,7 @@ public class MissionGenerator : MonoBehaviour {
         tube.transform.Rotate(90, 0, 0);
         tube.transform.localScale = new Vector3(tubeThickness, distance / 2f, tubeThickness);
         spawnedObjects.Add(tube);
+        return tube;
     }
 
     public void ClearPath() {
@@ -350,6 +422,7 @@ public class MissionGenerator : MonoBehaviour {
                 Destroy(obj);
         }
         spawnedObjects.Clear();
+        tubeMap.Clear();
     }
 
     public bool HasMission() {

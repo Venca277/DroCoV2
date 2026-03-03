@@ -13,6 +13,7 @@ public class MissionEditor : MonoBehaviour {
     [Header("Settings")]
     public Camera mainCamera;
     public LayerMask manipLayer;
+    public MissionGenerator missionGenerator;
 
     [Header("Gizmos")]
     public GameObject gizmoPrefab;
@@ -122,7 +123,7 @@ public class MissionEditor : MonoBehaviour {
                         HandleArrows nav = gizmo.AddComponent<HandleArrows>();
                         nav.wp = selectedPoint.transform;
                         nav.missioneditor = this;
-                        ColumnGizmo.Instance.createColumn(selectedPoint);
+                        ColumnGizmo.Instance.createCol(selectedPoint);
                     }
                 } else {
                     if (gizmo != null)
@@ -161,7 +162,7 @@ public class MissionEditor : MonoBehaviour {
                         savedTubes.Clear();
                         lastWPpositions.Clear();
                         foreach (var waypoint in selectedWaypoints) {
-                            savedTubes[waypoint] = FindTube(waypoint.gameObject);
+                            savedTubes[waypoint] = findTubesWaypoint(waypoint.gameObject);
                             lastWPpositions[waypoint] = waypoint.transform.position;
                         }
 
@@ -181,7 +182,7 @@ public class MissionEditor : MonoBehaviour {
             savedTubes.Clear();
             lastWPpositions.Clear();
             foreach (var waypoint in selectedWaypoints) {
-                savedTubes[waypoint] = FindTube(waypoint.gameObject);
+                savedTubes[waypoint] = findTubesWaypoint(waypoint.gameObject);
                 lastWPpositions[waypoint] = waypoint.transform.position;
             }
 
@@ -201,6 +202,7 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
+    /*
     public List<GameObject> FindTube(GameObject waypoint) {
         //casting with sphere search to detect any pipes
         //any Tube_Segment objs are added to the list
@@ -224,6 +226,14 @@ public class MissionEditor : MonoBehaviour {
             }
         }
         return tubes;
+    }
+    */
+
+    public List<GameObject> findTubesWaypoint(GameObject wp) {
+        if (missionGenerator != null && missionGenerator.tubeMap.ContainsKey(wp)) {
+            return missionGenerator.tubeMap[wp];
+        }
+        return new List<GameObject>();
     }
 
     public void UpdateTubes(List<GameObject> tubes, Vector3 oldwaypoint, Vector3 newwaypoint) {
@@ -340,7 +350,7 @@ public class MissionEditor : MonoBehaviour {
         lastWPpositions.Clear();
 
         //save tubes and positions for drag
-        savedTubes[wp] = FindTube(wp.gameObject);
+        savedTubes[wp] = findTubesWaypoint(wp.gameObject);
         lastWPpositions[wp] = wp.transform.position;
         mainCamera.GetComponent<ArcGISCameraControllerTouch>().enabled = false;
     }
@@ -352,7 +362,7 @@ public class MissionEditor : MonoBehaviour {
 
         //save tubes and positions for drag
         foreach (WaypointSelect wp in colWaypoints) {
-            savedTubes[wp] = FindTube(wp.gameObject);
+            savedTubes[wp] = findTubesWaypoint(wp.gameObject);
             lastWPpositions[wp] = wp.transform.position;
         }
         mainCamera.GetComponent<ArcGISCameraControllerTouch>().enabled = false;
@@ -395,7 +405,7 @@ public class MissionEditor : MonoBehaviour {
                 UpdateTubes(tubes, oldPos, newPos);
                 lastWPpositions[wp] = newPos;
             } else {
-                savedTubes[wp] = FindTube(wp.gameObject);
+                savedTubes[wp] = findTubesWaypoint(wp.gameObject);
                 List<GameObject> tubes = savedTubes[wp];
                 UpdateTubes(tubes, oldPos, newPos);
                 lastWPpositions[wp] = newPos;
