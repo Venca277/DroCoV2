@@ -38,7 +38,7 @@ public class DroneMissionController : MonoBehaviour {
 
         //converting to gps coords
         //put in point structure
-        List<GPSWaypoint> gpsHelix = generator.ConvertToGPSCoordinates(rawHelixUnity);
+        List<GPSWaypoint> gpsHelix = generator.ConvertToGPSCoordinates(rawHelixUnity, generator.helixNormals);
 
         //put in complex structure
         MissionData complexMission = new MissionData();
@@ -68,7 +68,7 @@ public class DroneMissionController : MonoBehaviour {
 
         //then we add the generated points
         foreach (var wp in gpsHelix) {
-            AddPointToSegment(scanSegment, wp.latitude, wp.longitude, wp.altitude);
+            AddPointToSegment(scanSegment, wp.latitude, wp.longitude, wp.altitude, wp.speed, wp.heading, wp.gimbal_pitch, wp.gimbal_yaw);
         }
 
         //add end to path
@@ -106,7 +106,7 @@ public class DroneMissionController : MonoBehaviour {
         }
 
         //gps conversion
-        List<GPSWaypoint> updatedGPS = generator.ConvertToGPSCoordinates(updatedPath);
+        List<GPSWaypoint> updatedGPS = generator.ConvertToGPSCoordinates(updatedPath, null);
 
         //back to currmission
         currentMission.route.segments[0].multipoint.points.Clear();
@@ -114,7 +114,7 @@ public class DroneMissionController : MonoBehaviour {
         AddPointToSegment(currentMission.route.segments[0], startLat, startLon, startAlt);
 
         foreach (GPSWaypoint gps in updatedGPS) {
-            AddPointToSegment(currentMission.route.segments[0], gps.latitude, gps.longitude, gps.altitude);
+            AddPointToSegment(currentMission.route.segments[0], gps.latitude, gps.longitude, gps.altitude, gps.speed, gps.heading, gps.gimbal_pitch, gps.gimbal_yaw);
         }
 
         AddPointToSegment(currentMission.route.segments[0], startLat, startLon, startAlt);
@@ -129,12 +129,27 @@ public class DroneMissionController : MonoBehaviour {
         }
     }
 
+    /*
     private void AddPointToSegment(Segment segment, double lat, double lon, double alt) {
         Point p = new Point();
         p.latitude = lat;
         p.longitude = lon;
         p.altitude = alt;
         p.altitudeType = "AMSL";
+        segment.multipoint.points.Add(p);
+    }
+    */
+
+    private void AddPointToSegment(Segment segment, double lat, double lon, double alt, float speed = 5.0f, float heading = 0.0f, float gimbalPitch = -45.0f, float gimbalYaw = 0.0f) {
+        Point p = new Point();
+        p.latitude = lat;
+        p.longitude = lon;
+        p.altitude = alt;
+        p.altitudeType = "AMSL";
+        p.speed = speed;
+        p.heading = heading;
+        p.gimbal_pitch = gimbalPitch;
+        p.gimbal_yaw = gimbalYaw;
         segment.multipoint.points.Add(p);
     }
 

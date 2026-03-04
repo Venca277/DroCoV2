@@ -12,6 +12,11 @@ public class GPSWaypoint {
     public double latitude;
     public double longitude;
     public double altitude;
+
+    public float speed = 5.0f;
+    public float heading = 0.0f;
+    public float gimbal_pitch = -45.0f;
+    public float gimbal_yaw = 0.0f;
 }
 
 public class MissionGenerator : MonoBehaviour {
@@ -51,6 +56,8 @@ public class MissionGenerator : MonoBehaviour {
     private LineRenderer lineRenderer;
     private List<GameObject> spawnedObjects = new List<GameObject>();
     public Dictionary<GameObject, List<GameObject>> tubeMap = new Dictionary<GameObject, List<GameObject>>();
+    public List<Vector3> helixNormals = new List<Vector3>();
+    public Vector3 lastcentroid = Vector3.zero;
 
     void Awake() {
         lineRenderer = GetComponent<LineRenderer>();
@@ -75,6 +82,7 @@ public class MissionGenerator : MonoBehaviour {
 
     public List<Vector3> GenerateScanPath(GameObject buildingObj, List<Vector3> footprintPoints) {
         ClearPath();
+        helixNormals.Clear();
 
         if (buildingObj == null || footprintPoints == null || footprintPoints.Count < 3)
             return new List<Vector3>();
@@ -85,11 +93,13 @@ public class MissionGenerator : MonoBehaviour {
 
         //orbital ring generation
         List<Vector3> orbitRing = new List<Vector3>();
+        List<Vector3> orbitNormal = new List<Vector3>();
         Vector3 centroid = Vector3.zero;
         foreach (var p in footprintPoints)
             centroid += p;
         centroid /= footprintPoints.Count;
         centroid.y = 0;
+        lastcentroid = centroid;
 
         List<Vector3> sepFootprint = new List<Vector3>();
         for (int i = 0; i < footprintPoints.Count; i++) {
@@ -142,6 +152,7 @@ public class MissionGenerator : MonoBehaviour {
 
             if (orbitRing.Count == 0 || Vector3.Distance(offsetPoint, orbitRing[orbitRing.Count - 1]) > 0.1f) {
                 orbitRing.Add(offsetPoint);
+                orbitNormal.Add(vertexNormal);
             }
         }
 
@@ -189,9 +200,13 @@ public class MissionGenerator : MonoBehaviour {
                 if (!isFirst) {
                     List<Vector3> sightPoints = SolveSightline(lastPoint, noCollisionPos, pushDir);
                     finalPath.AddRange(sightPoints);
+                    for (int j = 0; j < sightPoints.Count; j++) {
+                        helixNormals.Add(orbitNormal[i]);
+                    }
                     lastPoint = sightPoints[sightPoints.Count - 1];
                 } else {
                     finalPath.Add(noCollisionPos);
+                    helixNormals.Add(orbitNormal[i]);
                     lastPoint = noCollisionPos;
                     isFirst = false;
                 }
@@ -308,15 +323,17 @@ public class MissionGenerator : MonoBehaviour {
         return segPoints;
     }
 
-    public List<GPSWaypoint> ConvertToGPSCoordinates(List<Vector3> unityPath) {
+    public List<GPSWaypoint> ConvertToGPSCoordinates(List<Vector3> unityPath, List<Vector3> normals) {
         List<GPSWaypoint> gpsPath = new List<GPSWaypoint>();
 
         if (mapComponent == null) {
-            Debug.LogError("MissionGenerator: Není přiřazena ArcGIS Map Component! Nelze převádět souřadnice.");
+            Debug.LogError("MissionGenerator no arcgis map reference");
             return gpsPath;
         }
 
-        foreach (var point in unityPath) {
+        for (int i = 0; i < unityPath.Count; i++) {
+            Vector3 point = unityPath[i];
+
             //relative unity coords to gps coords
             ArcGISPoint geoPos = mapComponent.EngineToGeographic(point);
 
@@ -324,6 +341,22 @@ public class MissionGenerator : MonoBehaviour {
             wp.latitude = geoPos.Y;  // Y is lat
             wp.longitude = geoPos.X; // X is lon
             wp.altitude = geoPos.Z;  // Z is alt
+
+            if (normals != null && i < normals.Count) {
+                Vector3 neg = -normals[i];
+                float heading = Mathf.Atan2(neg.x, neg.z) * Mathf.Rad2Deg;
+                if (heading < 0)
+                    heading += 360;
+                wp.heading = heading;
+            } else if (lastcentroid != Vector3.zero) {
+                float vectx = unityPath[i].x - lastcentroid.x;
+                float vectz = unityPath[i].z - lastcentroid.z;
+                Vector3 dir = new Vector3(vectx, 0, vectz).normalized;
+                float heading = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+                if (heading < 0)
+                    heading += 360;
+                wp.heading = heading;
+            }
 
             gpsPath.Add(wp);
         }

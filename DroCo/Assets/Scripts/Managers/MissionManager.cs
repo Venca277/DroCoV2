@@ -401,4 +401,9 @@ public class Point {
     public double longitude;
     public double altitude;
     public string altitudeType;
+
+    public float speed;
+    public float heading;
+    public float gimbal_pitch;
+    public float gimbal_yaw;
 }
