@@ -43,6 +43,7 @@ public class MissionGenerator : MonoBehaviour {
     public GameObject waypointPrefab;
     public GameObject waypointUIPrefab;
     public float waypointSize = 0.3f;
+    public float flightSpeed = 5.0f;
 
     [Header("Icons")]
     public Sprite mapActiveIcon;
@@ -52,6 +53,10 @@ public class MissionGenerator : MonoBehaviour {
     public float droneRadius = 0.5f;
     public LayerMask collisionLayer;
     public float maxPush = 15.0f;
+
+    [Header("Cam")]
+    public float camWidth = 82.1f;
+    public float camHeight = 62.7f;
 
     private LineRenderer lineRenderer;
     private List<GameObject> spawnedObjects = new List<GameObject>();
@@ -341,6 +346,7 @@ public class MissionGenerator : MonoBehaviour {
             wp.latitude = geoPos.Y;  // Y is lat
             wp.longitude = geoPos.X; // X is lon
             wp.altitude = geoPos.Z;  // Z is alt
+            wp.speed = flightSpeed;  // flight speed
 
             if (normals != null && i < normals.Count) {
                 Vector3 neg = -normals[i];
@@ -447,6 +453,18 @@ public class MissionGenerator : MonoBehaviour {
         tube.transform.localScale = new Vector3(tubeThickness, distance / 2f, tubeThickness);
         spawnedObjects.Add(tube);
         return tube;
+    }
+
+    public float calculateWidthCoverage() {
+        float view = 2.0f * scanDistance * Mathf.Tan(camWidth * 0.5f * Mathf.Deg2Rad);
+        float cov = (view - maxSegmentLen) / view;
+        return cov * 100.0f;
+    }
+
+    public float calculateHeightCoverage() {
+        float view = 2.0f * scanDistance * Mathf.Tan(camHeight * 0.5f * Mathf.Deg2Rad);
+        float cov = (view - verticalStep) / view;
+        return cov * 100.0f;
     }
 
     public void ClearPath() {

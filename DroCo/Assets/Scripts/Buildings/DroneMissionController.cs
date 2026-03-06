@@ -173,4 +173,15 @@ public class DroneMissionController : MonoBehaviour {
         Debug.Log(">>> MISSION SENT <<<");
         // Debug.Log(json);
     }
+
+    public void StopMission() {
+        if (WebSocketServer.Instance == null) {
+            Debug.LogError("WebSocketServer not running!");
+            return;
+        }
+
+        string stop = "{\"type\":\"stop_mission\",\"data\":{}}";
+        WebSocketServer.Instance.BroadcastToAll(stop);
+        Toast.call.Show("Mission stop requested!", 2f, true);
+    }
 }

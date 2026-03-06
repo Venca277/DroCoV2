@@ -26,8 +26,9 @@ public class MissionUI : MonoBehaviour {
     [Header("Parameters")]
     public TMP_InputField scanDist;
     public TMP_InputField verticalStep;
-    public TMP_InputField tubeThickness;
+    public TMP_InputField segmentLen;
     public TMP_InputField waypointSize;
+    public TMP_InputField flightSpeed;
     public TMP_Dropdown color;
     public Toggle use3Dtubes;
     public Toggle showGhost;
@@ -71,6 +72,10 @@ public class MissionUI : MonoBehaviour {
             color.onValueChanged.AddListener(ColorChanged);
         if (waypointSize != null)
             waypointSize.onValueChanged.AddListener(WaypointSizeChanged);
+        if (flightSpeed != null)
+            flightSpeed.onValueChanged.AddListener(FlightSpeedChanged);
+        if (segmentLen != null)
+            segmentLen.onValueChanged.AddListener(SegmentLenChanged);
     }
 
     public bool HasMission() {
@@ -94,11 +99,14 @@ public class MissionUI : MonoBehaviour {
             use3Dtubes.isOn = generator.use3DTubes;
         if (color != null)
             SetColor();
-        if (tubeThickness != null)
-            tubeThickness.text = generator.tubeThickness.ToString();
+        if (segmentLen != null)
+            segmentLen.text = generator.maxSegmentLen.ToString();
         if (waypointSize != null)
             waypointSize.text = generator.waypointSize.ToString();
-
+        if (flightSpeed != null)
+            flightSpeed.text = generator.flightSpeed.ToString();
+        if (coverage != null)
+            getCoverage();
         RefreshList();
     }
 
@@ -166,16 +174,22 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void ScanDistChanged(string value) {
-        if (float.TryParse(value, out float dist)) {
+        if (float.TryParse(value, out float dist) && dist > 0) {
             generator.scanDistance = dist;
             RegenerateMission();
+            getCoverage();
+        } else {
+            Toast.call.Show("Invalid scan distance value", 2.0f, true);
         }
     }
 
     private void VerticalStepChanged(string value) {
-        if (float.TryParse(value, out float step)) {
+        if (float.TryParse(value, out float step) && step > 0) {
             generator.verticalStep = step;
             RegenerateMission();
+            getCoverage();
+        } else {
+            Toast.call.Show("Invalid vertical step value", 2.0f, true);
         }
     }
 
@@ -198,9 +212,29 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void WaypointSizeChanged(string value) {
-        if (float.TryParse(value, out float size)) {
+        if (float.TryParse(value, out float size) && size > 0) {
             generator.waypointSize = size;
             RegenerateMission();
+        } else {
+            Toast.call.Show("Invalid waypoint size value", 2.0f, true);
+        }
+    }
+
+    private void FlightSpeedChanged(string value) {
+        if (float.TryParse(value, out float speed) && speed > 0) {
+            generator.flightSpeed = speed;
+            getCoverage();
+        } else {
+            Toast.call.Show("Invalid flight speed value", 2.0f, true);
+        }
+    }
+
+    private void SegmentLenChanged(string value) {
+        if (float.TryParse(value, out float len) && len > 0) {
+            generator.maxSegmentLen = len;
+            RegenerateMission();
+        } else {
+            Toast.call.Show("Invalid segment length value", 2.0f, true);
         }
     }
 
@@ -234,6 +268,7 @@ public class MissionUI : MonoBehaviour {
         if (waypointContent.gameObject.activeInHierarchy) {
             LayoutRebuilder.ForceRebuildLayoutImmediate(waypointContent.GetComponent<RectTransform>());
         }
+        getCoverage();
     }
 
     public void selectedUIWaypoint(GameObject wp) {
@@ -267,5 +302,27 @@ public class MissionUI : MonoBehaviour {
         mat.color = origColor;
         mat.DisableKeyword("_EMISSION");
         mat.SetColor("_EmissionColor", Color.black);
+    }
+
+    private void getCoverage() {
+        if (coverage != null) {
+            float covW = generator.calculateWidthCoverage();
+            float covH = generator.calculateHeightCoverage();
+            string covWtext = getCoverageText(covW);
+            string covHtext = getCoverageText(covH);
+
+            coverage.text = $"W: {covWtext} H: {covHtext}";
+        }
+    }
+
+    private string getCoverageText(float cov) {
+        if (cov < 0f)
+            return $"<color=red>{cov:F1}%</color>";
+        else if (cov < 50f)
+            return $"<color=orange>{cov:F1}%</color>";
+        else if (cov < 75f)
+            return $"<color=yellow>{cov:F1}%</color>";
+        else
+            return $"<color=green>{cov:F1}%</color>";
     }
 }

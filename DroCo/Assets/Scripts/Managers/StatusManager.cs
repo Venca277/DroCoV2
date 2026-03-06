@@ -29,13 +29,12 @@ public class StatusManager : MonoBehaviour {
     private const int WARNING_TYPE_HEIGHT = 2;
     private const int WARNING_TYPE_IMU = 3;
     private const int WARNING_TYPE_COMPASS = 4;
+    public bool MissionRunning { get; private set; } = false;
 
-    // Start is called before the first frame update
     void Start() {
 
     }
 
-    // Update is called once per frame
     void Update() {
 
     }

@@ -210,6 +210,7 @@ public class GameManager : Singleton<GameManager> {
 
     public void HandleReceivedDroneData(DroneFlightData flightData) {
         // Update flight data of connected drone
+        //Debug.LogWarning(flightData.ToString());
         DroneManager.Instance.HandleReceivedDroneData(flightData);
         GameObject.FindAnyObjectByType<ToolPanelControl>()?.RecordData(flightData);
     }
@@ -217,11 +218,13 @@ public class GameManager : Singleton<GameManager> {
     public void CenterMap(DroneFlightData flightData) {
         //modified - xsovakv00 11.2. 2026 - centering map after drone connects messes up with mission waypoints recalculation
         if (missionGenerator != null && missionGenerator.HasMission()) {
+            Debug.LogWarning("Not centering map because mission exists");
             //Debug.Log("mission exists wont center");
             return;
         }
 
         if (!mapCentered) {
+            Debug.LogWarning($"[CenterMap] First GPS: lat={flightData.gps.latitude}, lon={flightData.gps.longitude}, alt={flightData.altitude}");
             mapCentered = true;
             firstDroneFlightData = flightData;
 

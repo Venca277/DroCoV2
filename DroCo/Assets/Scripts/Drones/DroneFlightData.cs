@@ -78,3 +78,15 @@ public class DroneFlightData {
     //    Compass = compass;
     //}
 }
+
+[Serializable]
+public class MissionStatusData {
+    public string status;
+}
+
+[Serializable]
+public class MissionProgressData {
+    public int target_waypoint_index;
+    public int total_waypoints;
+    public bool is_waypoint_reached;
+}

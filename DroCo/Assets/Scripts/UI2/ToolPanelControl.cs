@@ -13,6 +13,7 @@ public class ToolPanelControl : MonoBehaviour {
     public Image screenshotButton;
     public Image focusButton;
     public Image recordButton;
+    public Image stopButton;
     public Sprite streamIconON;
     public Sprite streamIconOFF;
     public Sprite streamIconStreaming;
@@ -22,6 +23,8 @@ public class ToolPanelControl : MonoBehaviour {
     public Sprite focusOFF;
     public Sprite recordON;
     public Sprite recordOFF;
+    public Sprite stopOFF;
+    public Sprite stopON;
     public TMP_Text text;
 
     [Header("Size")]
@@ -192,5 +195,16 @@ public class ToolPanelControl : MonoBehaviour {
             Camera.main.transform.position = Vector3.Lerp(Camera.main.transform.position, targetPosition, Time.deltaTime * 2f);
             Camera.main.transform.LookAt(dronePosition);
         }
+    }
+
+    public void emergencyStop() {
+        DroneMissionController controller = FindObjectOfType<DroneMissionController>();
+        if (controller != null) {
+            controller.StopMission();
+            Toast.call.Show("Emergency stop requested!", 2f, true);
+        } else {
+            Toast.call.Show("Stop requested failed!", 2f, true);
+        }
+
     }
 }

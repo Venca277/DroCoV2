@@ -137,6 +137,12 @@ public class WebSocketServerBehavior : WebSocketBehavior {
             Message<DroneStatusData> status = JsonUtility.FromJson<Message<DroneStatusData>>(jsonText);
             //Debug.Log("Parsed status update for drone " + status.data);
             UnityMainThreadDispatcher.Instance().Enqueue(HandleStatusUpdate(status.data));
+        } else if (handshake_done && msg.type == "mission_status") {
+            Message<MissionStatusData> missionStatus = JsonUtility.FromJson<Message<MissionStatusData>>(jsonText);
+            UnityMainThreadDispatcher.Instance().Enqueue(HandleMissionStatus(missionStatus.data));
+        } else if (handshake_done && msg.type == "mission_progress") {
+            Message<MissionProgressData> missionProgress = JsonUtility.FromJson<Message<MissionProgressData>>(jsonText);
+            UnityMainThreadDispatcher.Instance().Enqueue(HandleMissionProgress(missionProgress.data));
         } else {
             Debug.LogError("Unknown data received! " + jsonText);
         }
@@ -243,6 +249,7 @@ public class WebSocketServerBehavior : WebSocketBehavior {
     }
 
     private IEnumerator UpdateDroneFlightData(DroneFlightData flightData) {
+        Debug.LogWarning("text update " + flightData.ToString());
         DroneManager.Instance.HandleReceivedDroneData(flightData);
         yield return null;
     }
@@ -253,6 +260,15 @@ public class WebSocketServerBehavior : WebSocketBehavior {
         yield return null;
     }
 
+    private IEnumerator HandleMissionStatus(MissionStatusData missionStatus) {
+        //MissionManager.Instance.HandleReceivedMissionStatus(missionStatus);
+        yield return null;
+    }
+
+    private IEnumerator HandleMissionProgress(MissionProgressData missionProgress) {
+        //MissionManager.Instance.HandleReceivedMissionProgress(missionProgress);
+        yield return null;
+    }
 }
 
 public class WebSocketServer : Singleton<WebSocketServer> {
