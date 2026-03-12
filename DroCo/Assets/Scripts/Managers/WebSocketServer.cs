@@ -374,7 +374,8 @@ public class WebSocketServer : Singleton<WebSocketServer> {
             var service = Server.WebSocketServices["/"];
 
             if (service != null) {
-                Debug.Log($"Broadcasting message to {service.Sessions.Count} clients.");
+                //TODO uncomment after debug
+                //Debug.Log($"Broadcasting message to {service.Sessions.Count} clients.");
                 service.Sessions.Broadcast(jsonMessage);
             } else {
                 Debug.LogError("WebSocket service not found!");

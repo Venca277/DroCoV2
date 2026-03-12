@@ -9,6 +9,11 @@ using System.Globalization;
 using Newtonsoft.Json;
 using System;
 using UnityEngine.EventSystems;
+using System.Collections;
+using UnityEngine.Timeline;
+using UnityEditor;
+using Esri.GameEngine.View;
+using Unity.Mathematics;
 
 public class BuildingFetcher : MonoBehaviour {
     public Camera arcgisCamera;
@@ -17,7 +22,7 @@ public class BuildingFetcher : MonoBehaviour {
     public MissionGenerator missionGenerator;
     public DroneMissionController missionController;
     //public Button launchMissionButton;
-    public bool showGhost = false;
+    public bool showGhost = true;
 
     private float lastClickTime = 0f;
     private float doubleClickThreshold = 0.25f;
@@ -25,6 +30,7 @@ public class BuildingFetcher : MonoBehaviour {
 
     private GameObject buildingObjectReady = null;
     private List<Vector3> buildingWorldPoints = null;
+    private List<GameObject> buildings = new List<GameObject>();
 
     private void Awake() {
         /*
@@ -32,6 +38,11 @@ public class BuildingFetcher : MonoBehaviour {
             launchMissionButton.interactable = false;
         }
         */
+    }
+
+    private void Start() {
+        WaitForSeconds wait = new WaitForSeconds(15f);
+        StartCoroutine(FetchArea(wait));
     }
 
     private void Update() {
@@ -46,18 +57,36 @@ public class BuildingFetcher : MonoBehaviour {
 
             //send ray
             Ray ray = arcgisCamera.ScreenPointToRay(Input.mousePosition);
+            RaycastHit[] hits = Physics.RaycastAll(ray, 1000f);
+            BuildingTag foundLoaded = null;
+            foreach (var hit in hits) {
+                foundLoaded = hit.collider.gameObject.GetComponent<BuildingTag>();
+                if (foundLoaded != null) {
+                    break;
+                }
+            }
+            if (foundLoaded != null) {
+                ClearSelection();
+                currentSelection = foundLoaded.gameObject;
+                buildingObjectReady = currentSelection;
+                buildingWorldPoints = foundLoaded.WorldPoints;
+                FloorSelect(buildingObjectReady, currentSelection.GetComponent<MeshFilter>().mesh, currentSelection.GetComponent<MeshFilter>().mesh.bounds.min.y);
+                missionController.ProcessMission(buildingObjectReady, buildingWorldPoints);
+                MissionUI.Instance?.SetNewMission(buildingObjectReady, buildingWorldPoints);
+                return;
+            }
 
-            if (!Physics.Raycast(ray, out RaycastHit hit, 1000f))
+            if (!Physics.Raycast(ray, out RaycastHit normalhit, 1000f))
                 return;
 
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) {
                 return;
             }
-
             //convert to geocoordinates
-            ArcGISPoint geo = map.EngineToGeographic(hit.point);
+            ArcGISPoint geo = map.EngineToGeographic(normalhit.point);
             double lat = geo.Y;
             double lon = geo.X;
+
 
             Debug.Log($"DOUBLE-CLICK GEO: lat={lat}, lon={lon}");
 
@@ -87,21 +116,20 @@ public class BuildingFetcher : MonoBehaviour {
                     return;
                 }
 
-                Debug.Log($"Selected building ID: {building.id} | Tags found: {building.tags?.Count ?? 0}");
-
+                //Debug.Log($"Selected building ID: {building.id} | Tags found: {building.tags?.Count ?? 0}");
                 //extract the Z value of user click
-                ArcGISPoint hitGeo = map.EngineToGeographic(hit.point);
-                float roofAltitude = (float) hitGeo.Z;
+                //ArcGISPoint hitGeo = map.EngineToGeographic(hit.point);
+                //float roofAltitude = (float) hitGeo.Z;
 
                 //extract building height from OSM data if present or calculable
                 float realHeight = GetRealHeight(building);
                 Debug.Log($"Calculated Height: {realHeight}m");
 
                 //recalculating world point to relative unity coordinates
-                var unityRel = OSMToUnity.ConvertPolygonToUnity(building, map, 0);
+                List<Vector3> unityRel = OSMToUnity.ConvertPolygonToUnity(building, map, 0);
 
                 //reconstruction of unity building object
-                CreateBuildingMesh(unityRel, building, roofAltitude);
+                CreateBuildingMesh(unityRel, building);
             }));
         }
     }
@@ -113,6 +141,38 @@ public class BuildingFetcher : MonoBehaviour {
         }
         if (missionGenerator != null)
             missionGenerator.ClearPath();
+    }
+
+    private IEnumerator FetchArea(WaitForSeconds wait) {
+        yield return wait;
+
+        ArcGISPoint cam = map.EngineToGeographic(arcgisCamera.transform.position);
+        double lat = cam.Y;
+        double lon = cam.X;
+
+        Debug.Log($"Loading models at: lat={lat}, lon={lon}");
+        foreach (var b in buildings) {
+            Destroy(b);
+        }
+        buildings.Clear();
+
+        StartCoroutine(overpass.FetchBuildingArea(lat, lon, (jsonString) => {
+            if (string.IsNullOrEmpty(jsonString)) {
+                Debug.LogError("OSM fetch failed or empty.");
+                return;
+            }
+
+            //json deserialize 
+            OSMRoot root = JsonConvert.DeserializeObject<OSMRoot>(jsonString);
+            if (root == null || root.elements == null)
+                return;
+
+            foreach (var building in root.elements) {
+                List<Vector3> unityRel = OSMToUnity.ConvertPolygonToUnity(building, map, 0);
+                CreateBuildingMesh(unityRel, building, false);
+            }
+            Toast.call.Show("Building models loaded", 2f, false);
+        }));
     }
 
     private float GetAltitudeFromCast(Vector3 center) {
@@ -171,8 +231,9 @@ public class BuildingFetcher : MonoBehaviour {
         return defaultHeight;
     }
 
-    public void CreateBuildingMesh(List<Vector3> worldPoints, OSMElement buildingData, float roofAltitudeFromRay) {
-        ClearSelection();
+    public void CreateBuildingMesh(List<Vector3> worldPoints, OSMElement buildingData, bool generateMission = true) {
+        if (generateMission)
+            ClearSelection();
 
         if (worldPoints == null || worldPoints.Count < 3)
             return;
@@ -184,6 +245,8 @@ public class BuildingFetcher : MonoBehaviour {
         centroidSeaLevel /= worldPoints.Count;
 
         float groundAlt = GetAltitudeFromCast(centroidSeaLevel);
+        //float groundAlt = GetArcGisAltitude(centroidSeaLevel);
+
         Debug.Log("Ground: " + groundAlt);
 
         float osmHeight = GetRealHeight(buildingData);
@@ -200,8 +263,15 @@ public class BuildingFetcher : MonoBehaviour {
         Vector3 relative = map.GeographicToEngine(objPiv);
 
         // gameobject reconstruction
-        currentSelection = new GameObject($"OSM_Selection_{buildingData.id}");
-        GameObject buildingObj = currentSelection;
+        if (generateMission)
+            currentSelection = new GameObject($"OSM_Selection_{buildingData.id}");
+
+        GameObject buildingObj = null;
+        if (generateMission) {
+            buildingObj = currentSelection;
+        } else
+            buildingObj = new GameObject($"OSM_Building_{buildingData.id}");
+
         if (map != null)
             buildingObj.transform.SetParent(map.transform, true);
 
@@ -277,6 +347,7 @@ public class BuildingFetcher : MonoBehaviour {
 
         var col = buildingObj.AddComponent<MeshCollider>();
         col.sharedMesh = mesh;
+        col.convex = true;  //TODO find out if this works
 
         //enable the ghost
         mr.enabled = showGhost;
@@ -308,7 +379,26 @@ public class BuildingFetcher : MonoBehaviour {
 
         // ==========================================
 
+        if (!generateMission) {
+            BuildingTag tag = buildingObj.AddComponent<BuildingTag>();
+            tag.BuildingData = buildingData;
+            tag.WorldPoints = worldPoints;
+            buildings.Add(buildingObj);
+            return;
+        }
 
+        FloorSelect(buildingObj, mesh, bottomY);
+
+        // object created, saving for mission start
+        buildingObjectReady = buildingObj;
+        buildingWorldPoints = worldPoints;
+        missionController.ProcessMission(buildingObjectReady, buildingWorldPoints);
+        //UpdateButtonState();
+        MissionUI.Instance?.SetNewMission(buildingObjectReady, buildingWorldPoints);
+    }
+
+
+    private void FloorSelect(GameObject buildingObj, Mesh mesh, float bottomY) {
         // highlight floor object
         GameObject floorObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         floorObj.name = "Floor_Highlight";
@@ -355,15 +445,7 @@ public class BuildingFetcher : MonoBehaviour {
 
         floorMr.material = floorMat;
         floorMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-        // object created, saving for mission start
-        buildingObjectReady = buildingObj;
-        buildingWorldPoints = worldPoints;
-        missionController.ProcessMission(buildingObjectReady, buildingWorldPoints);
-        //UpdateButtonState();
-        MissionUI.Instance?.SetNewMission(buildingObjectReady, buildingWorldPoints);
     }
-
     /*
     private void UpdateButtonState() {
         if (launchMissionButton != null) {

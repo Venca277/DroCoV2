@@ -102,6 +102,13 @@ public class DroneManager : Singleton<DroneManager> {
         return Vector3.zero;
     }
 
+    public Drone GetFirstDrone() {
+        foreach (KeyValuePair<string, Drone> drone in Drones) {
+            return drone.Value;
+        }
+        return null;
+    }
+
     public void DestroyDroneAll() {
         foreach (KeyValuePair<string, Drone> drone in Drones) {
             DestroyDrone(drone.Value);

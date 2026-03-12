@@ -14,6 +14,7 @@ public class MissionUI : MonoBehaviour {
     public MissionGenerator generator;
     public DroneMissionController droneMission;
     public BuildingFetcher fetcher;
+    public Navigator navigator;
 
     [Header("UI")]
     public GameObject missionPanel;
@@ -76,6 +77,8 @@ public class MissionUI : MonoBehaviour {
             flightSpeed.onValueChanged.AddListener(FlightSpeedChanged);
         if (segmentLen != null)
             segmentLen.onValueChanged.AddListener(SegmentLenChanged);
+        if (startMissionButton != null)
+            startMissionButton.onClick.AddListener(MissionStart);
     }
 
     public bool HasMission() {
@@ -324,5 +327,14 @@ public class MissionUI : MonoBehaviour {
             return $"<color=yellow>{cov:F1}%</color>";
         else
             return $"<color=green>{cov:F1}%</color>";
+    }
+
+    private void MissionStart() {
+        List<Transform> waypoints = new List<Transform>();
+        foreach (GameObject wp in generator.GetMissionWaypoints()) {
+            if (wp != null)
+                waypoints.Add(wp.transform);
+        }
+        navigator.StartMission("", waypoints);
     }
 }

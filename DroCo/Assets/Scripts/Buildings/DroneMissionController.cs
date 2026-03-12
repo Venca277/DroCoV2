@@ -129,17 +129,6 @@ public class DroneMissionController : MonoBehaviour {
         }
     }
 
-    /*
-    private void AddPointToSegment(Segment segment, double lat, double lon, double alt) {
-        Point p = new Point();
-        p.latitude = lat;
-        p.longitude = lon;
-        p.altitude = alt;
-        p.altitudeType = "AMSL";
-        segment.multipoint.points.Add(p);
-    }
-    */
-
     private void AddPointToSegment(Segment segment, double lat, double lon, double alt, float speed = 5.0f, float heading = 0.0f, float gimbalPitch = -45.0f, float gimbalYaw = 0.0f) {
         Point p = new Point();
         p.latitude = lat;

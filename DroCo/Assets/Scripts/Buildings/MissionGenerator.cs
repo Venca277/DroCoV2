@@ -480,4 +480,12 @@ public class MissionGenerator : MonoBehaviour {
     public bool HasMission() {
         return spawnedObjects.Count > 0;
     }
+
+    public List<GameObject> GetMissionWaypoints() {
+        List<GameObject> waypoints = new List<GameObject>();
+        foreach (GameObject wp in tubeMap.Keys) {
+            waypoints.Add(wp);
+        }
+        return waypoints;
+    }
 }
