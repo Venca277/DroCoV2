@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f03e2797de3695478b4eedc03cb3eca, type: 3}
+  m_Name: MainDroneDatabase
+  m_EditorClassIdentifier: 
+  drones:
+  - modelName: DJI Mini 2
+    sensorWidth: 6.17
+    sensorHeight: 4.55
+    focalLength: 4.49
+    vFov: 53.8
+  - modelName: DJI Mini 3 Pro
+    sensorWidth: 9.6
+    sensorHeight: 7.2
+    focalLength: 6.72
+    vFov: 56.3
+  - modelName: DJI Mini 4 Pro
+    sensorWidth: 9.6
+    sensorHeight: 7.2
+    focalLength: 6.72
+    vFov: 56.3
+  - modelName: DJI Mavic Air 2
+    sensorWidth: 6.4
+    sensorHeight: 4.8
+    focalLength: 4.5
+    vFov: 56.1
+  - modelName: DJI Air 2S
+    sensorWidth: 13.2
+    sensorHeight: 8.8
+    focalLength: 8.38
+    vFov: 55.4
+  - modelName: DJI Air 3 wide
+    sensorWidth: 9.6
+    sensorHeight: 7.2
+    focalLength: 6.72
+    vFov: 56.3
+  - modelName: DJI Mavic 2 Pro
+    sensorWidth: 13.2
+    sensorHeight: 8.8
+    focalLength: 10.26
+    vFov: 46.4
+  - modelName: DJI Mavic 3
+    sensorWidth: 17.3
+    sensorHeight: 13
+    focalLength: 12.29
+    vFov: 55.7
+  - modelName: DJI Phantom 4 Pro
+    sensorWidth: 13.2
+    sensorHeight: 8.8
+    focalLength: 8.8
+    vFov: 53.1
+  - modelName: DJI Mavic Pro
+    sensorWidth: 6.17
+    sensorHeight: 4.55
+    focalLength: 4.73
+    vFov: 51.4

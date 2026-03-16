@@ -31,6 +31,7 @@ public class BuildingFetcher : MonoBehaviour {
     private GameObject buildingObjectReady = null;
     private List<Vector3> buildingWorldPoints = null;
     private List<GameObject> buildings = new List<GameObject>();
+    public Settings settings;
 
     private void Awake() {
         /*
@@ -41,8 +42,10 @@ public class BuildingFetcher : MonoBehaviour {
     }
 
     private void Start() {
-        WaitForSeconds wait = new WaitForSeconds(15f);
-        StartCoroutine(FetchArea(wait));
+        if (settings.range != "none") {
+            WaitForSeconds wait = new WaitForSeconds(15f);
+            StartCoroutine(FetchArea(wait));
+        }
     }
 
     private void Update() {
@@ -172,10 +175,10 @@ public class BuildingFetcher : MonoBehaviour {
                 CreateBuildingMesh(unityRel, building, false);
             }
             Toast.call.Show("Building models loaded", 2f, false);
-        }));
+        }, settings.getRange()));
     }
 
-    private float GetAltitudeFromCast(Vector3 center) {
+    public float GetAltitudeFromCast(Vector3 center) {
         Vector3 highPlace = new Vector3(center.x, 42069f, center.z);
         Ray down = new Ray(highPlace, Vector3.down);
 

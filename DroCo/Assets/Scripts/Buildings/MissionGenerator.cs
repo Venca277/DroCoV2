@@ -55,8 +55,9 @@ public class MissionGenerator : MonoBehaviour {
     public float maxPush = 15.0f;
 
     [Header("Cam")]
-    public float camWidth = 82.1f;
-    public float camHeight = 62.7f;
+    public float senzWidth = 82.1f;
+    public float senzHeight = 62.7f;
+    public float focalLength = 4.67f;
 
     private LineRenderer lineRenderer;
     private List<GameObject> spawnedObjects = new List<GameObject>();
@@ -456,13 +457,13 @@ public class MissionGenerator : MonoBehaviour {
     }
 
     public float calculateWidthCoverage() {
-        float view = 2.0f * scanDistance * Mathf.Tan(camWidth * 0.5f * Mathf.Deg2Rad);
+        float view = (scanDistance * senzWidth) / focalLength;
         float cov = (view - maxSegmentLen) / view;
         return cov * 100.0f;
     }
 
     public float calculateHeightCoverage() {
-        float view = 2.0f * scanDistance * Mathf.Tan(camHeight * 0.5f * Mathf.Deg2Rad);
+        float view = (scanDistance * senzHeight) / focalLength;
         float cov = (view - verticalStep) / view;
         return cov * 100.0f;
     }
