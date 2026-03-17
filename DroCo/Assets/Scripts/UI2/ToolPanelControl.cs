@@ -198,13 +198,11 @@ public class ToolPanelControl : MonoBehaviour {
     }
 
     public void emergencyStop() {
-        DroneMissionController controller = FindObjectOfType<DroneMissionController>();
+        MissionController controller = FindObjectOfType<MissionController>();
         if (controller != null) {
-            controller.StopMission();
-            Toast.call.Show("Emergency stop requested!", 2f, true);
+            controller.MissionStop();
         } else {
             Toast.call.Show("Stop requested failed!", 2f, true);
         }
-
     }
 }

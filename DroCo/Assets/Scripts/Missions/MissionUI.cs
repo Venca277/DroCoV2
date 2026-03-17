@@ -12,7 +12,8 @@ public class MissionUI : MonoBehaviour {
 
     [Header("Classes")]
     public MissionGenerator generator;
-    public DroneMissionController droneMission;
+    //public DroneMissionController droneMission;
+    public MissionController missionController;
     public BuildingFetcher fetcher;
     public Navigator navigator;
 
@@ -168,7 +169,7 @@ public class MissionUI : MonoBehaviour {
         generator?.ClearPath();
         List<Vector3> newPath = generator.GenerateScanPath(currBuilding, currFootprint);
         if (newPath != null && newPath.Count > 0) {
-            droneMission?.ProcessMission(currBuilding, currFootprint);
+            missionController?.PrepareMission(currBuilding, currFootprint);
             Debug.Log("Mission regenerated");
             RefreshList();
         } else {
@@ -330,11 +331,13 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void MissionStart() {
-        List<Transform> waypoints = new List<Transform>();
+        //TODO deprecated, delete later
+        List<Vector3> waypoints = new List<Vector3>();
         foreach (GameObject wp in generator.GetMissionWaypoints()) {
             if (wp != null)
-                waypoints.Add(wp.transform);
+                waypoints.Add(wp.transform.position);
         }
-        navigator.StartMission("", waypoints);
+        List<Vector3> normals = generator.GetMissionNormals(waypoints, generator.GetMissionCenter(waypoints));
+        navigator.StartMission("", waypoints, normals);
     }
 }

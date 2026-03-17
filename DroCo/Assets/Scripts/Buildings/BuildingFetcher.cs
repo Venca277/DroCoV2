@@ -20,7 +20,8 @@ public class BuildingFetcher : MonoBehaviour {
     public OverpassClient overpass;
     public ArcGISMapComponent map;
     public MissionGenerator missionGenerator;
-    public DroneMissionController missionController;
+    //public DroneMissionController missionController;
+    public MissionController missionController;
     //public Button launchMissionButton;
     public bool showGhost = true;
 
@@ -74,7 +75,7 @@ public class BuildingFetcher : MonoBehaviour {
                 buildingObjectReady = currentSelection;
                 buildingWorldPoints = foundLoaded.WorldPoints;
                 FloorSelect(buildingObjectReady, currentSelection.GetComponent<MeshFilter>().mesh, currentSelection.GetComponent<MeshFilter>().mesh.bounds.min.y);
-                missionController.ProcessMission(buildingObjectReady, buildingWorldPoints);
+                missionController.PrepareMission(buildingObjectReady, buildingWorldPoints);
                 MissionUI.Instance?.SetNewMission(buildingObjectReady, buildingWorldPoints);
                 return;
             }
@@ -395,7 +396,7 @@ public class BuildingFetcher : MonoBehaviour {
         // object created, saving for mission start
         buildingObjectReady = buildingObj;
         buildingWorldPoints = worldPoints;
-        missionController.ProcessMission(buildingObjectReady, buildingWorldPoints);
+        missionController.PrepareMission(buildingObjectReady, buildingWorldPoints);
         //UpdateButtonState();
         MissionUI.Instance?.SetNewMission(buildingObjectReady, buildingWorldPoints);
     }

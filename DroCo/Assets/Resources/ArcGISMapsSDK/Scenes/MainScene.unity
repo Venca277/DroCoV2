@@ -5408,7 +5408,7 @@ MonoBehaviour:
   overpass: {fileID: 452451339}
   map: {fileID: 1192607889}
   missionGenerator: {fileID: 452451342}
-  missionController: {fileID: 980948410}
+  missionController: {fileID: 980948415}
   showGhost: 0
   settings: {fileID: 1945369443}
 --- !u!4 &452451341
@@ -8742,7 +8742,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 980948410}
         m_TargetAssemblyTypeName: DroneMissionController, Assembly-CSharp
-        m_MethodName: 
+        m_MethodName: MissionStart
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -12493,8 +12493,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 961739749}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.28684217, y: -0.5117933, z: 0.18627746, w: 0.7880926}
-  m_LocalPosition: {x: 0.0000018170844, y: 71, z: -0.0000067155233}
+  m_LocalRotation: {x: 0.28683457, y: -0.5118041, z: 0.18627396, w: 0.7880892}
+  m_LocalPosition: {x: 117.489044, y: 70.9989, z: -16.023026}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -12514,14 +12514,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   position:
-    x: 15.928545
-    y: 50.26335
+    x: 16.59861292499953
+    y: 49.226855921799306
     z: 291.99999999738554
     SRWkid: 4326
   rotation:
-    Heading: 294.00000396654667
-    Pitch: 50.00000274455783
-    Roll: 0.0000006072744113638745
+    Heading: 294.0000013777883
+    Pitch: 50.00000185187878
+    Roll: 0.0000006809148176015779
   surfacePlacementMode: 0
   surfacePlacementOffset: 0
 --- !u!114 &961739755
@@ -12557,15 +12557,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_IsInitialized: 1
   m_LocalPosition:
-    x: 3928701.3463509465
-    y: 4881791.022417694
-    z: 1121236.4362250695
+    x: 3999638.232553472
+    y: 4807293.911073905
+    z: 1192238.510995955
   m_LocalRotation:
     value:
-      x: 0.27753356
-      y: 0.92125505
-      z: -0.21182254
-      w: -0.17145117
+      x: 0.286321
+      y: 0.9203308
+      z: -0.20636512
+      w: -0.16859676
   m_LocalScale:
     x: 1
     y: 1
@@ -12882,6 +12882,7 @@ GameObject:
   - component: {fileID: 980948412}
   - component: {fileID: 980948413}
   - component: {fileID: 980948414}
+  - component: {fileID: 980948415}
   m_Layer: 0
   m_Name: GeneratedMission
   m_TagString: Untagged
@@ -12944,6 +12945,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   generator: {fileID: 452451342}
+  settings: {fileID: 0}
+  navigator: {fileID: 0}
   startLat: 49.226015
   startLon: 16.597071
   startAlt: 250
@@ -12954,6 +12957,9 @@ MonoBehaviour:
     route:
       name: 
       segments: []
+  curentMissionNormals: []
+  currentMissionSticks: []
+  missionCenter: {x: 0, y: 0, z: 0}
 --- !u!114 &980948411
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -13000,7 +13006,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   generator: {fileID: 452451342}
-  droneMission: {fileID: 980948410}
+  missionController: {fileID: 0}
   fetcher: {fileID: 452451340}
   navigator: {fileID: 0}
   missionPanel: {fileID: 746325074}
@@ -13036,14 +13042,44 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   waypoints: []
+  waypointNormals: []
   isMissionRunning: 0
   waypointReach: 0.5
   maxSpeed: 1
   maxYawSpeed: 15
   maxAscentSpeed: 0.5
   droneID: 
-  staleThreshold: 3
-  waypointGrace: 3
+  timeTakeOver: 3
+  waypointTime: 3
+--- !u!114 &980948415
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 980948407}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f16b81577ec70c4a9d9b216cf9db7e1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  generator: {fileID: 452451342}
+  droneManager: {fileID: 169862470}
+  settings: {fileID: 1945369443}
+  navigator: {fileID: 980948414}
+  startLat: 49.226015
+  startLon: 16.597071
+  startAlt: 250
+  paramMaxHeight: 50
+  paramMinHeight: 10
+  paramOverlap: 0.5
+  currentMission:
+    route:
+      name: 
+      segments: []
+  curentMissionNormals: []
+  currentMissionSticks: []
+  missionCenter: {x: 0, y: 0, z: 0}
 --- !u!1 &981959901
 GameObject:
   m_ObjectHideFlags: 0
@@ -15787,15 +15823,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_LocalPosition:
-    x: 3928657.7015666696
-    y: 4881736.424070796
-    z: 1121223.9801694755
+    x: 3999615.7281266386
+    y: 4807250.60745243
+    z: 1192109.2066835072
   m_LocalRotation:
     value:
-      x: -0.20470184
-      y: -0.7507446
-      z: -0.27129638
-      w: 0.56646097
+      x: -0.20819071
+      y: -0.7515411
+      z: -0.279294
+      w: 0.560212
 --- !u!4 &1192607888
 Transform:
   m_ObjectHideFlags: 0
@@ -16023,8 +16059,8 @@ MonoBehaviour:
       Polygons: []
       Type: 0
   originPosition:
-    x: 15.928545
-    y: 50.26335
+    x: 16.597
+    y: 49.227
     z: 221
     SRWkid: 4326
   mapType: 0

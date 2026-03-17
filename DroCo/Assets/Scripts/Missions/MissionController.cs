@@ -1,4 +1,4 @@
-/*
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Newtonsoft.Json;
@@ -9,10 +9,11 @@ public class NetworkWrapper {
     public MissionData data;
 }
 
-public class DroneMissionController : MonoBehaviour {
+public class MissionController : MonoBehaviour {
 
     [Header("Reference")]
     public MissionGenerator generator;
+    public DroneManager droneManager;
     public Settings settings;
     public Navigator navigator;
 
@@ -31,14 +32,32 @@ public class DroneMissionController : MonoBehaviour {
     public List<Vector3> currentMissionSticks;
     public Vector3 missionCenter;
 
-    public void ProcessMission(GameObject building, List<Vector3> footprint) {
-        Debug.Log("--- MISSION PLANNING ---");
+
+    void Start() {
+
+    }
+
+    // Update is called once per frame
+    void Update() {
+        if (droneManager == null)
+            return;
+
+        Drone drone = droneManager.GetFirstDrone();
+        if (drone == null)
+            return;
+        startLat = drone.FlightData.gps.latitude;
+        startLon = drone.FlightData.gps.longitude;
+        startAlt = drone.FlightData.altitude;
+    }
+
+    public void PrepareMission(GameObject building, List<Vector3> footprint) {
+        Debug.Log("PREPARING MISSION...");
 
         //generate path
         List<Vector3> rawHelixUnity = generator.GenerateScanPath(building, footprint);
 
         if (rawHelixUnity == null || rawHelixUnity.Count == 0) {
-            Debug.LogError("Error: Generator returned no path!");
+            Debug.LogError("Generator returned no path!");
             return;
         }
 
@@ -49,7 +68,7 @@ public class DroneMissionController : MonoBehaviour {
         //put in complex structure
         MissionData complexMission = new MissionData();
         complexMission.route = new Route();
-        complexMission.route.name = "Generated Helix Scan";
+        complexMission.route.name = "helix scan";
         complexMission.route.segments = new List<Segment>();
 
         //one mission segment
@@ -86,24 +105,11 @@ public class DroneMissionController : MonoBehaviour {
         //sending over network
         //SendMissionToNetwork(complexMission);
         currentMission = complexMission;
+
     }
 
     private void UpdateMissionFromWaypoints() {
-        GameObject[] allobjs = FindObjectsOfType<GameObject>();
-        List<GameObject> allwps = new List<GameObject>();
-
-        foreach (GameObject obj in allobjs) {
-            if (obj.name.StartsWith("WP_")) {
-                allwps.Add(obj);
-            }
-        }
-
-        //sort with names
-        allwps.Sort((a, b) => {
-            int numA = int.Parse(a.name.Replace("WP_", ""));
-            int numB = int.Parse(b.name.Replace("WP_", ""));
-            return numA.CompareTo(numB);
-        });
+        List<GameObject> allwps = generator.GetMissionWaypoints();
 
         //list of positions
         List<Vector3> updatedPath = new List<Vector3>();
@@ -127,21 +133,6 @@ public class DroneMissionController : MonoBehaviour {
         }
 
         AddPointToSegment(currentMission.route.segments[0], startLat, startLon, startAlt);
-    }
-
-    public void MissionStart() {
-        //TODO dronemissioncontroller is deprecated might delete later
-        if (currentMission != null) {
-            UpdateMissionFromWaypoints();
-            if (settings.isWaypointMission) {
-                //SendMissionToNetwork(currentMission);
-            } else {
-                //navigator.StartMission("", currentMissionSticks, curentMissionNormals);
-            }
-
-        } else {
-            Debug.LogError("No mission ready to start. Try selecting a building first.");
-        }
     }
 
     private void AddPointToSegment(Segment segment, double lat, double lon, double alt, float speed = 5.0f, float heading = 0.0f, float gimbalPitch = -45.0f, float gimbalYaw = 0.0f) {
@@ -173,19 +164,30 @@ public class DroneMissionController : MonoBehaviour {
 
         //send to all clients
         WebSocketServer.Instance.BroadcastToAll(json);
-
-        Debug.Log(">>> MISSION SENT <<<");
-        // Debug.Log(json);
     }
 
-    public void StopMission() {
-        if (WebSocketServer.Instance == null) {
-            Debug.LogError("WebSocketServer not running!");
-            return;
+    public void MissionStart() {
+        //TODO dronemissioncontroller is deprecated might delete later
+        if (currentMission != null) {
+            UpdateMissionFromWaypoints();
+            if (settings.isWaypointMission) {
+                SendMissionToNetwork(currentMission);
+            } else {
+                List<Vector3> normals = generator.GetMissionNormals(currentMissionSticks, generator.GetMissionCenter(currentMissionSticks));
+                navigator.StartMission("", currentMissionSticks, normals);
+            }
+        } else {
+            Debug.LogError("No mission ready to start. Try selecting a building first.");
         }
-
-        string stop = "{\"type\":\"stop_mission\",\"data\":{}}";
-        WebSocketServer.Instance.BroadcastToAll(stop);
-        Toast.call.Show("Mission stop requested!", 2f, true);
     }
-}*/
+
+    public void MissionStop() {
+        if (!settings.isWaypointMission) {
+            navigator.StopDrone();
+        } else {
+            string stop = "{\"type\":\"stop_mission\",\"data\":{}}";
+            WebSocketServer.Instance.BroadcastToAll(stop);
+            Toast.call.Show("Mission stop requested!", 2f, true);
+        }
+    }
+}

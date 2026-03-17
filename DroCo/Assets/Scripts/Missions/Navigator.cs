@@ -4,7 +4,8 @@ using WebSocketSharp;
 
 public class Navigator : MonoBehaviour {
     [Header("Mission Data")]
-    public List<Transform> waypoints;
+    public List<Vector3> waypoints;
+    public List<Vector3> waypointNormals;
     private int currentWaypointIndex = 0;
     public bool isMissionRunning = false;
     private Vector3 center;
@@ -33,10 +34,11 @@ public class Navigator : MonoBehaviour {
     public float waypointTime = 3f; //seconds after reaching a waypoint before stale check resumes
     private float waypointTimer = 0f;
 
-    public void StartMission(string droneID, List<Transform> waypoints) {
+    public void StartMission(string droneID, List<Vector3> waypoints, List<Vector3> waypointNormals = null) {
         droneManager = FindObjectOfType<DroneManager>();
         this.droneID = droneID;
         this.waypoints = waypoints;
+        this.waypointNormals = waypointNormals;
         currentWaypointIndex = 0;
         isMissionRunning = true;
         posTimer = 0f;
@@ -59,11 +61,11 @@ public class Navigator : MonoBehaviour {
         NavigateToCurrentWaypoint();
     }
 
-    private Vector3 centerPoint(List<Transform> waypoints) {
+    private Vector3 centerPoint(List<Vector3> waypoints) {
         Vector3 sum = Vector3.zero;
         int count = waypoints.Count;
-        foreach (Transform waypoint in waypoints) {
-            sum += waypoint.position;
+        foreach (Vector3 waypoint in waypoints) {
+            sum += waypoint;
         }
         return sum / count;
     }
@@ -94,13 +96,23 @@ public class Navigator : MonoBehaviour {
 
         //next waypoint to travel to
         //calculate direction vector for yaw of the drone
-        Vector3 targetPos = waypoints[currentWaypointIndex].position;
+        Vector3 targetPos = waypoints[currentWaypointIndex];
         Vector3 dirToTargetYaw = (center - dronePos);
         dirToTargetYaw.y = 0; //but only flat movement
 
         float targetYaw = droneYaw;
-        if (dirToTargetYaw.magnitude > 0.1f) {
-            targetYaw = Mathf.Atan2(dirToTargetYaw.x, dirToTargetYaw.z) * Mathf.Rad2Deg;
+        if (waypointNormals != null && currentWaypointIndex < waypointNormals.Count) {
+            Vector3 normal = waypointNormals[currentWaypointIndex];
+            normal.y = 0f;
+
+            if (normal.sqrMagnitude > 0.0001f) {
+                normal.Normalize();
+                targetYaw = Mathf.Atan2(normal.x, normal.z) * Mathf.Rad2Deg;
+            }
+        } else {
+            if (dirToTargetYaw.magnitude > 0.1f) {
+                targetYaw = Mathf.Atan2(dirToTargetYaw.x, dirToTargetYaw.z) * Mathf.Rad2Deg;
+            }
         }
 
         //get distance between us and target
@@ -185,7 +197,7 @@ public class Navigator : MonoBehaviour {
         Debug.Log("Mission stopped.");
         string path = Application.persistentDataPath + "/flight_log.txt";
         System.IO.File.WriteAllText(path, logger.ToString());
-        Debug.Log("Flight log saved: " + path);
+        Toast.call.Show("Mission stopped!", 2f, true);
         logger.Clear();
     }
 

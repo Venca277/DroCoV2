@@ -489,4 +489,31 @@ public class MissionGenerator : MonoBehaviour {
         }
         return waypoints;
     }
+
+    public Vector3 GetMissionCenter(List<Vector3> points) {
+        if (points == null || points.Count == 0)
+            return Vector3.zero;
+
+        Vector3 sum = Vector3.zero;
+        int count = points.Count;
+        foreach (Vector3 p in points) {
+            sum += p;
+        }
+        return sum / count;
+    }
+
+    public List<Vector3> GetMissionNormals(List<Vector3> points, Vector3 center) {
+        List<Vector3> normals = new List<Vector3>();
+        if (points == null || points.Count == 0)
+            return normals;
+
+        foreach (Vector3 p in points) {
+            Vector3 dir = (p - center).normalized;
+            if (Physics.Raycast(p, dir, out RaycastHit hit, 100f)) {
+                Vector3 wallNormal = hit.normal;
+                normals.Add(wallNormal);
+            }
+        }
+        return normals;
+    }
 }
