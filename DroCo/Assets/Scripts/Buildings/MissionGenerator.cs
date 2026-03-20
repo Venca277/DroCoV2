@@ -22,7 +22,7 @@ public class GPSWaypoint {
 public class MissionGenerator : MonoBehaviour {
 
     [Header("ArcGIS Reference")]
-    public ArcGISMapComponent mapComponent; //map object from hierarchy
+    public ArcGISMapComponent mapComponent; //map object
 
     [Header("Flight Path Parameters")]
     [Tooltip("Distance of orbit from building")]

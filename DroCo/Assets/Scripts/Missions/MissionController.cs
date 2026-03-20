@@ -2,12 +2,9 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Newtonsoft.Json;
-
-[System.Serializable]
-public class NetworkWrapper {
-    public string type;
-    public MissionData data;
-}
+using System.IO;
+using System.Windows.Input;
+using Esri.GameEngine.Geometry;
 
 public class MissionController : MonoBehaviour {
 
@@ -31,19 +28,20 @@ public class MissionController : MonoBehaviour {
     public List<Vector3> curentMissionNormals;
     public List<Vector3> currentMissionSticks;
     public Vector3 missionCenter;
+    private GameObject currBuilding;
+    private List<Vector3> currFootprint;
 
-
-    void Start() {
-
-    }
-
-    // Update is called once per frame
     void Update() {
         if (droneManager == null)
             return;
 
         Drone drone = droneManager.GetFirstDrone();
         if (drone == null)
+            return;
+
+        if (drone.FlightData == null)
+            return;
+        if (drone.FlightData.gps == null)
             return;
         startLat = drone.FlightData.gps.latitude;
         startLon = drone.FlightData.gps.longitude;
@@ -148,6 +146,19 @@ public class MissionController : MonoBehaviour {
         segment.multipoint.points.Add(p);
     }
 
+    public bool Regenerate() {
+        if (currBuilding == null || currFootprint == null)
+            return false;
+
+        generator.ClearPath();
+        List<Vector3> path = generator.GenerateScanPath(currBuilding, currFootprint);
+        if (path == null || path.Count == 0)
+            return false;
+
+        PrepareMission(currBuilding, currFootprint);
+        return true;
+    }
+
     private void SendMissionToNetwork(MissionData dataStructure) {
         if (WebSocketServer.Instance == null) {
             Debug.LogError("WebSocketServer not running!");
@@ -189,5 +200,154 @@ public class MissionController : MonoBehaviour {
             WebSocketServer.Instance.BroadcastToAll(stop);
             Toast.call.Show("Mission stop requested!", 2f, true);
         }
+    }
+
+    public string SaveMission(string name = "none") {
+        if (currentMission == null)
+            return null;
+
+        currentMission.route.name = name;
+
+        Collider col = currBuilding.GetComponent<Collider>();
+        BuildingInfo info = new BuildingInfo();
+        info.name = name;
+
+        //preserving global height which could be different in different map centering
+        Bounds b = col.bounds;
+        ArcGISPoint down = generator.mapComponent.EngineToGeographic(new Vector3(b.center.x, b.min.y, b.center.z));
+        ArcGISPoint top = generator.mapComponent.EngineToGeographic(new Vector3(b.center.x, b.max.y, b.center.z));
+        info.minY = (float) down.Z;
+        info.maxY = (float) top.Z;
+
+        info.footprint = new List<GpsCorner>();
+        foreach (Vector3 p in currFootprint) {
+            ArcGISPoint geo = generator.mapComponent.EngineToGeographic(p);
+            GpsCorner corner = new GpsCorner();
+            corner.lat = geo.Y;
+            corner.lon = geo.X;
+            info.footprint.Add(corner);
+        }
+
+        MissionSave save = new MissionSave();
+        save.mission = currentMission;
+        save.building = info;
+
+        string json = JsonConvert.SerializeObject(save);
+        string folder = Path.Combine(Application.persistentDataPath, "Missions");
+        Directory.CreateDirectory(folder);
+        string filename = $"mission_{name}_{System.DateTime.Now.ToString("yyyyMMdd_HHmmss")}.json";
+        string path = Path.Combine(folder, filename);
+        File.WriteAllText(path, json);
+
+        Toast.call.Show($"Mission saved!", 2f, false);
+        return path;
+    }
+
+    public bool LoadMission(string path) {
+        if (!File.Exists(path)) {
+            Toast.call.Show($"Mission file not found!", 2f, true);
+            return false;
+        }
+
+        MissionSave loaded = JsonConvert.DeserializeObject<MissionSave>(File.ReadAllText(path));
+
+        if (loaded == null || loaded.mission.route == null || loaded.mission.route.segments == null || loaded.mission.route.segments.Count == 0) {
+            Toast.call.Show($"Invalid mission file!", 2f, true);
+            return false;
+        }
+
+        List<Point> points = loaded.mission.route.segments[0].multipoint.points;
+        if (points == null || points.Count < 3) {
+            Toast.call.Show($"Mission file contains no points!", 2f, true);
+            return false;
+        }
+
+        Parameters param = loaded.mission.route.segments[0].parameters;
+        if (param != null) {
+            generator.scanDistance = param.scanDistance;
+            paramMaxHeight = param.maxHeight;
+            paramMinHeight = param.minHeight;
+            paramOverlap = param.overlapForward;
+        }
+
+        List<Vector3> footprint = new List<Vector3>();
+        if (loaded.building?.footprint != null) {
+            foreach (GpsCorner cor in loaded.building.footprint) {
+                ArcGISPoint geo = new ArcGISPoint(cor.lon, cor.lat, 0, new ArcGISSpatialReference(4326));
+                footprint.Add(generator.mapComponent.GeographicToEngine(geo));
+            }
+        }
+
+        double lat = loaded.building.footprint[0].lat;
+        double lon = loaded.building.footprint[0].lon;
+        float minY = generator.mapComponent.GeographicToEngine(new ArcGISPoint(lon, lat, loaded.building.minY, new ArcGISSpatialReference(4326))).y;
+        float maxY = generator.mapComponent.GeographicToEngine(new ArcGISPoint(lon, lat, loaded.building.maxY, new ArcGISSpatialReference(4326))).y;
+
+        GameObject ghost = new GameObject("LoadedMission_" + loaded.mission.route.name);
+        BoxCollider box = ghost.AddComponent<BoxCollider>();
+        box.center = new Vector3(0, (minY + maxY) / 2f, 0);
+        box.size = new Vector3(1, maxY - minY, 1);
+
+        List<Vector3> flightpath = new List<Vector3>();
+        for (int i = 1; i < points.Count - 1; i++) {
+            ArcGISPoint geo = new ArcGISPoint(points[i].longitude, points[i].latitude, points[i].altitude, new ArcGISSpatialReference(4326));
+            Vector3 pos = generator.mapComponent.GeographicToEngine(geo);
+            flightpath.Add(pos);
+        }
+
+        generator.ClearPath();
+        generator.VisualizePath(flightpath);
+        currentMission = loaded.mission;
+
+        SetBuilding(ghost, footprint);
+
+        MissionUI.Instance?.SetNewMission(ghost, footprint);
+        Toast.call.Show($"Mission loaded!", 2f, false);
+        return true;
+    }
+
+    public void SetScanDistance(float value) {
+        generator.scanDistance = value;
+        Regenerate();
+    }
+
+    public void SetVerticalStep(float value) {
+        generator.verticalStep = value;
+        Regenerate();
+    }
+
+    public void SetSegmentLen(float value) {
+        generator.maxSegmentLen = value;
+        Regenerate();
+    }
+
+    public void SetWaypointSize(float value) {
+        generator.waypointSize = value;
+        Regenerate();
+    }
+
+    public void SetFlightSpeed(float value) {
+        generator.flightSpeed = value;
+        // pozor: flightSpeed neregeneruje cestu, jen mění rychlost
+    }
+
+    public void SetUse3DTubes(bool value) {
+        generator.use3DTubes = value;
+        Regenerate();
+    }
+
+    public void SetPathColor(Color value) {
+        generator.pathColor = value;
+        Regenerate();
+    }
+
+    public void SetBuilding(GameObject building, List<Vector3> footprint) {
+        currBuilding = building;
+        currFootprint = footprint;
+    }
+
+    public void ClearBuilding() {
+        currBuilding = null;
+        currFootprint = null;
     }
 }

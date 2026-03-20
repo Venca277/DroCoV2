@@ -26,6 +26,7 @@ public class MissionUI : MonoBehaviour {
     public GameObject waypointUIPrefab;
 
     [Header("Parameters")]
+    public TMP_InputField missionName;
     public TMP_InputField scanDist;
     public TMP_InputField verticalStep;
     public TMP_InputField segmentLen;
@@ -47,6 +48,7 @@ public class MissionUI : MonoBehaviour {
     private GameObject currBuilding;
     private List<Vector3> currFootprint;
     private bool hasMission = false;
+    private string currentMissionName = "";
 
     void Awake() {
         if (Instance != null && Instance != this) {
@@ -62,6 +64,10 @@ public class MissionUI : MonoBehaviour {
             delete.onClick.AddListener(DeleteMission);
         if (save != null)
             save.onClick.AddListener(SaveMission);
+        if (missionName != null) {
+            missionName.onValueChanged.AddListener(MissionNameChanged);
+            missionName.text = "NewMission";
+        }
         if (scanDist != null)
             scanDist.onValueChanged.AddListener(ScanDistChanged);
         if (verticalStep != null)
@@ -87,14 +93,15 @@ public class MissionUI : MonoBehaviour {
     }
 
     public void SetNewMission(GameObject building, List<Vector3> footprint) {
-        currBuilding = building;
-        currFootprint = footprint;
+        missionController.SetBuilding(building, footprint);
         hasMission = true;
         missionImage.sprite = missionON;
         startMissionButton.enabled = true;
         startMissionButton.interactable = true;
 
 
+        if (missionName != null)
+            missionName.text = "NewMission";
         if (scanDist != null)
             scanDist.text = generator.scanDistance.ToString();
         if (verticalStep != null)
@@ -140,6 +147,7 @@ public class MissionUI : MonoBehaviour {
         currBuilding = null;
         currFootprint = null;
         hasMission = false;
+        currentMissionName = "";
         missionImage.sprite = missionOFF;
         content.gameObject.SetActive(false);
         startMissionButton.enabled = false;
@@ -159,29 +167,37 @@ public class MissionUI : MonoBehaviour {
         if (!hasMission)
             return;
 
-        Toast.call.Show("Mission saved!", 2.0f, false);
+        string saved = missionController.SaveMission(currentMissionName);
+        if (saved == null)
+            Toast.call.Show("Error saving mission", 2.0f, true);
     }
 
     private void RegenerateMission() {
         if (!hasMission)
             return;
 
-        generator?.ClearPath();
-        List<Vector3> newPath = generator.GenerateScanPath(currBuilding, currFootprint);
-        if (newPath != null && newPath.Count > 0) {
-            missionController?.PrepareMission(currBuilding, currFootprint);
-            Debug.Log("Mission regenerated");
-            RefreshList();
-        } else {
-            Toast.call.Show("Error regenerating mission", 2.0f, true);
+        if (!missionController.Regenerate()) {
+            Toast.call.Show("Regeneration not available for loaded missions", 2.0f, true);
+            return;
         }
+
+        Debug.Log("Mission regenerated");
+        RefreshList();
+    }
+
+    private void MissionNameChanged(string value) {
+        if (string.IsNullOrEmpty(value)) {
+            Toast.call.Show("Mission name cannot be empty", 2.0f, true);
+            return;
+        }
+        currentMissionName = value;
     }
 
     private void ScanDistChanged(string value) {
         if (float.TryParse(value, out float dist) && dist > 0) {
-            generator.scanDistance = dist;
-            RegenerateMission();
+            missionController.SetScanDistance(dist);
             getCoverage();
+            RefreshList();
         } else {
             Toast.call.Show("Invalid scan distance value", 2.0f, true);
         }
@@ -189,24 +205,24 @@ public class MissionUI : MonoBehaviour {
 
     private void VerticalStepChanged(string value) {
         if (float.TryParse(value, out float step) && step > 0) {
-            generator.verticalStep = step;
-            RegenerateMission();
+            missionController.SetVerticalStep(step);
             getCoverage();
+            RefreshList();
         } else {
             Toast.call.Show("Invalid vertical step value", 2.0f, true);
         }
     }
 
     private void Use3DTubesChanged(bool value) {
-        generator.use3DTubes = value;
-        RegenerateMission();
+        missionController.SetUse3DTubes(value);
+        RefreshList();
     }
 
     private void ColorChanged(int index) {
         Color[] colors = new Color[] { Color.red, Color.green, Color.blue, Color.yellow, Color.cyan, Color.magenta };
         if (index < colors.Length) {
-            generator.pathColor = colors[index];
-            RegenerateMission();
+            missionController.SetPathColor(colors[index]);
+            RefreshList();
         }
     }
 
@@ -217,16 +233,15 @@ public class MissionUI : MonoBehaviour {
 
     private void WaypointSizeChanged(string value) {
         if (float.TryParse(value, out float size) && size > 0) {
-            generator.waypointSize = size;
-            RegenerateMission();
-        } else {
+            missionController.SetWaypointSize(size);
+            RefreshList();
+        } else
             Toast.call.Show("Invalid waypoint size value", 2.0f, true);
-        }
     }
 
     private void FlightSpeedChanged(string value) {
         if (float.TryParse(value, out float speed) && speed > 0) {
-            generator.flightSpeed = speed;
+            missionController.SetFlightSpeed(speed);
             getCoverage();
         } else {
             Toast.call.Show("Invalid flight speed value", 2.0f, true);
@@ -235,8 +250,8 @@ public class MissionUI : MonoBehaviour {
 
     private void SegmentLenChanged(string value) {
         if (float.TryParse(value, out float len) && len > 0) {
-            generator.maxSegmentLen = len;
-            RegenerateMission();
+            missionController.SetSegmentLen(len);
+            RefreshList();
         } else {
             Toast.call.Show("Invalid segment length value", 2.0f, true);
         }
@@ -250,7 +265,7 @@ public class MissionUI : MonoBehaviour {
             Destroy(child.gameObject);
         }
 
-        foreach (GameObject wp in generator.tubeMap.Keys) {
+        foreach (GameObject wp in generator.GetMissionWaypoints()) {
             if (wp == null)
                 continue;
 
@@ -331,13 +346,6 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void MissionStart() {
-        //TODO deprecated, delete later
-        List<Vector3> waypoints = new List<Vector3>();
-        foreach (GameObject wp in generator.GetMissionWaypoints()) {
-            if (wp != null)
-                waypoints.Add(wp.transform.position);
-        }
-        List<Vector3> normals = generator.GetMissionNormals(waypoints, generator.GetMissionCenter(waypoints));
-        navigator.StartMission("", waypoints, normals);
+        missionController.MissionStart();
     }
 }
