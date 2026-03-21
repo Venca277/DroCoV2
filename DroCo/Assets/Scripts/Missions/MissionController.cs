@@ -206,6 +206,7 @@ public class MissionController : MonoBehaviour {
         if (currentMission == null)
             return null;
 
+        UpdateMissionFromWaypoints();
         currentMission.route.name = name;
 
         Collider col = currBuilding.GetComponent<Collider>();
@@ -235,7 +236,7 @@ public class MissionController : MonoBehaviour {
         string json = JsonConvert.SerializeObject(save);
         string folder = Path.Combine(Application.persistentDataPath, "Missions");
         Directory.CreateDirectory(folder);
-        string filename = $"mission_{name}_{System.DateTime.Now.ToString("yyyyMMdd_HHmmss")}.json";
+        string filename = $"mission_{name}.json";
         string path = Path.Combine(folder, filename);
         File.WriteAllText(path, json);
 
@@ -283,10 +284,15 @@ public class MissionController : MonoBehaviour {
         float minY = generator.mapComponent.GeographicToEngine(new ArcGISPoint(lon, lat, loaded.building.minY, new ArcGISSpatialReference(4326))).y;
         float maxY = generator.mapComponent.GeographicToEngine(new ArcGISPoint(lon, lat, loaded.building.maxY, new ArcGISSpatialReference(4326))).y;
 
+        Bounds bounds = new Bounds(footprint[0], Vector3.zero);
+        foreach (Vector3 p in footprint) {
+            bounds.Encapsulate(p);
+        }
         GameObject ghost = new GameObject("LoadedMission_" + loaded.mission.route.name);
+        ghost.transform.position = new Vector3(bounds.center.x, 0f, bounds.center.z);
         BoxCollider box = ghost.AddComponent<BoxCollider>();
         box.center = new Vector3(0, (minY + maxY) / 2f, 0);
-        box.size = new Vector3(1, maxY - minY, 1);
+        box.size = new Vector3(bounds.size.x, maxY - minY, bounds.size.z);
 
         List<Vector3> flightpath = new List<Vector3>();
         for (int i = 1; i < points.Count - 1; i++) {
@@ -301,9 +307,21 @@ public class MissionController : MonoBehaviour {
 
         SetBuilding(ghost, footprint);
 
-        MissionUI.Instance?.SetNewMission(ghost, footprint);
+        MissionUI.Instance?.SetNewMission(ghost, footprint, loaded.building.name);
         Toast.call.Show($"Mission loaded!", 2f, false);
         return true;
+    }
+
+    public List<string> GetAllMissions() {
+        string folder = Path.Combine(Application.persistentDataPath, "Missions");
+        Directory.CreateDirectory(folder);
+        string[] files = Directory.GetFiles(folder, "*.json");
+        List<string> missions = new List<string>(files);
+        return missions;
+    }
+
+    public GameObject GetCurrentBuilding() {
+        return currBuilding;
     }
 
     public void SetScanDistance(float value) {

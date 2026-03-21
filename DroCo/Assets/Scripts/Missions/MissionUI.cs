@@ -23,6 +23,7 @@ public class MissionUI : MonoBehaviour {
     public Image missionImage;
     public Button startMissionButton;
     public Transform waypointContent;
+    public Transform missionContent;
     public GameObject waypointUIPrefab;
 
     [Header("Parameters")]
@@ -46,9 +47,12 @@ public class MissionUI : MonoBehaviour {
     public Sprite missionOFF;
 
     private GameObject currBuilding;
+    private GameObject selectedMission;
     private List<Vector3> currFootprint;
     private bool hasMission = false;
     private string currentMissionName = "";
+    private string selectedMissionPath = "";
+    private bool regenerate = false;
 
     void Awake() {
         if (Instance != null && Instance != this) {
@@ -92,16 +96,17 @@ public class MissionUI : MonoBehaviour {
         return hasMission;
     }
 
-    public void SetNewMission(GameObject building, List<Vector3> footprint) {
+    public void SetNewMission(GameObject building, List<Vector3> footprint, string name = null) {
+        regenerate = false;
         missionController.SetBuilding(building, footprint);
         hasMission = true;
         missionImage.sprite = missionON;
         startMissionButton.enabled = true;
         startMissionButton.interactable = true;
 
-
+        currentMissionName = name ?? "NewMission";
         if (missionName != null)
-            missionName.text = "NewMission";
+            missionName.text = currentMissionName;
         if (scanDist != null)
             scanDist.text = generator.scanDistance.ToString();
         if (verticalStep != null)
@@ -119,6 +124,7 @@ public class MissionUI : MonoBehaviour {
         if (coverage != null)
             getCoverage();
         RefreshList();
+        regenerate = true;
     }
 
     private void SetColor() {
@@ -186,6 +192,9 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void MissionNameChanged(string value) {
+        if (!regenerate)
+            return;
+
         if (string.IsNullOrEmpty(value)) {
             Toast.call.Show("Mission name cannot be empty", 2.0f, true);
             return;
@@ -194,6 +203,8 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void ScanDistChanged(string value) {
+        if (!regenerate)
+            return;
         if (float.TryParse(value, out float dist) && dist > 0) {
             missionController.SetScanDistance(dist);
             getCoverage();
@@ -204,6 +215,8 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void VerticalStepChanged(string value) {
+        if (!regenerate)
+            return;
         if (float.TryParse(value, out float step) && step > 0) {
             missionController.SetVerticalStep(step);
             getCoverage();
@@ -214,11 +227,15 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void Use3DTubesChanged(bool value) {
+        if (!regenerate)
+            return;
         missionController.SetUse3DTubes(value);
         RefreshList();
     }
 
     private void ColorChanged(int index) {
+        if (!regenerate)
+            return;
         Color[] colors = new Color[] { Color.red, Color.green, Color.blue, Color.yellow, Color.cyan, Color.magenta };
         if (index < colors.Length) {
             missionController.SetPathColor(colors[index]);
@@ -227,11 +244,15 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void showGhostChanged(bool value) {
+        if (!regenerate)
+            return;
         fetcher.showGhost = value;
         //generator.showGhost = value;
     }
 
     private void WaypointSizeChanged(string value) {
+        if (!regenerate)
+            return;
         if (float.TryParse(value, out float size) && size > 0) {
             missionController.SetWaypointSize(size);
             RefreshList();
@@ -249,6 +270,8 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void SegmentLenChanged(string value) {
+        if (!regenerate)
+            return;
         if (float.TryParse(value, out float len) && len > 0) {
             missionController.SetSegmentLen(len);
             RefreshList();
@@ -288,6 +311,59 @@ public class MissionUI : MonoBehaviour {
             LayoutRebuilder.ForceRebuildLayoutImmediate(waypointContent.GetComponent<RectTransform>());
         }
         getCoverage();
+    }
+
+    public void DisplayAllMissions() {
+        List<string> missions = missionController.GetAllMissions();
+        foreach (Transform child in missionContent) {
+            Destroy(child.gameObject);
+        }
+
+        foreach (string path in missions) {
+            string fileName = Path.GetFileNameWithoutExtension(path);
+            GameObject missionObj = Instantiate(waypointUIPrefab, missionContent);
+            missionObj.transform.localScale = Vector3.one;
+
+            TMP_Text label = missionObj.GetComponentInChildren<TMP_Text>();
+            if (label != null) {
+                label.text = fileName;
+            }
+
+            Button btn = missionObj.GetComponent<Button>();
+            if (btn != null) {
+                string clickedPath = path;
+                btn.onClick.AddListener(() => SelectMission(clickedPath, missionObj));
+            }
+        }
+    }
+
+    public void LoadSelectedMission() {
+        if (string.IsNullOrEmpty(selectedMissionPath)) {
+            Toast.call.Show("No mission selected", 2.0f, true);
+            return;
+        }
+
+        if (missionController.LoadMission(selectedMissionPath)) {
+            GameObject building = missionController.GetCurrentBuilding();
+            BoxCollider col = building.GetComponent<BoxCollider>();
+            Bounds locBounds = new Bounds(col.center, col.size);
+            if (building != null) {
+                fetcher.FloorBoundsSelect(building, locBounds);
+                fetcher.SetCurrentSelection(building);
+            }
+            //Toast.call.Show("Failed to load mission", 2.0f, true);
+        } else {
+            Toast.call.Show("Failed to load mission", 2.0f, true);
+        }
+    }
+
+    private void SelectMission(string path, GameObject obj) {
+        if (selectedMission != null)
+            selectedMission.GetComponent<Image>().color = Color.white;
+
+        selectedMissionPath = path;
+        selectedMission = obj;
+        obj.GetComponent<Image>().color = new Color(0.5f, 0.8f, 1f);
     }
 
     public void selectedUIWaypoint(GameObject wp) {

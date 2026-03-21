@@ -403,6 +403,12 @@ public class BuildingFetcher : MonoBehaviour {
 
 
     private void FloorSelect(GameObject buildingObj, Mesh mesh, float bottomY) {
+        Bounds b = mesh.bounds;
+        b.center = new Vector3(b.center.x, bottomY, b.center.z);
+        FloorBoundsSelect(buildingObj, b);
+    }
+
+    public void FloorBoundsSelect(GameObject buildingObj, Bounds bounds) {
         // highlight floor object
         GameObject floorObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         floorObj.name = "Floor_Highlight";
@@ -411,13 +417,12 @@ public class BuildingFetcher : MonoBehaviour {
         // center alignment
         // mesh center is optical center of object
         // the height of the highlight above ground
-        Vector3 center = mesh.bounds.center;
-        floorObj.transform.localPosition = new Vector3(center.x, bottomY + 1.0f, center.z);
+        Vector3 center = bounds.center;
+        floorObj.transform.localPosition = new Vector3(center.x, bounds.min.y, center.z);
         floorObj.transform.localRotation = Quaternion.identity;
 
         // size and dimensions of the floor highlight
-        Bounds b = mesh.bounds;
-        float maxSize = Mathf.Max(b.size.x, b.size.z);
+        float maxSize = Mathf.Max(bounds.size.x, bounds.size.z);
         float diameter = maxSize * 1.3f;
         floorObj.transform.localScale = new Vector3(diameter, 0.05f, diameter);
 
@@ -450,6 +455,11 @@ public class BuildingFetcher : MonoBehaviour {
         floorMr.material = floorMat;
         floorMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
     }
+
+    public void SetCurrentSelection(GameObject obj) {
+        currentSelection = obj;
+    }
+
     /*
     private void UpdateButtonState() {
         if (launchMissionButton != null) {
