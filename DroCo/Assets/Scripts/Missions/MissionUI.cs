@@ -376,7 +376,12 @@ public class MissionUI : MonoBehaviour {
 
     public void selectedUIWaypoint(GameObject wp) {
         if (Camera.main != null) {
-            Camera.main.transform.position = wp.transform.position + new Vector3(0, 5, -10);
+            Vector3 off = new Vector3(0, 5, -10);
+            if (wp.name.StartsWith("WP_") && int.TryParse(wp.name.Substring(3), out int index)) {
+                Vector3 normal = generator.helixNormals[index];
+                off = normal * 3f + Vector3.up * 2f;
+            }
+            Camera.main.transform.position = wp.transform.position + off;
             Camera.main.transform.LookAt(wp.transform);
         }
         StartCoroutine(shineWp(wp));
