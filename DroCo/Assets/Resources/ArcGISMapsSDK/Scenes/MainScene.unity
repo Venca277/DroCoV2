@@ -13960,7 +13960,6 @@ MonoBehaviour:
   generator: {fileID: 452451342}
   missionController: {fileID: 980948415}
   fetcher: {fileID: 452451340}
-  navigator: {fileID: 980948414}
   missionPanel: {fileID: 746325074}
   content: {fileID: 209767687}
   missionImage: {fileID: 136736155}

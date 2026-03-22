@@ -8,7 +8,8 @@ using TMPro;
 using UnityEditor.VersionControl;
 
 [System.Serializable]
-public class GPSWaypoint {
+public class GPSWaypoint
+{
     public double latitude;
     public double longitude;
     public double altitude;
@@ -19,7 +20,8 @@ public class GPSWaypoint {
     public float gimbal_yaw = 0.0f;
 }
 
-public class MissionGenerator : MonoBehaviour {
+public class MissionGenerator : MonoBehaviour
+{
 
     [Header("ArcGIS Reference")]
     public ArcGISMapComponent mapComponent; //map object
@@ -65,7 +67,8 @@ public class MissionGenerator : MonoBehaviour {
     public List<Vector3> helixNormals = new List<Vector3>();
     public Vector3 lastcentroid = Vector3.zero;
 
-    void Awake() {
+    void Awake()
+    {
         lineRenderer = GetComponent<LineRenderer>();
         if (lineRenderer == null)
             lineRenderer = gameObject.AddComponent<LineRenderer>();
@@ -86,7 +89,8 @@ public class MissionGenerator : MonoBehaviour {
         lineRenderer.material = mat;
     }
 
-    public List<Vector3> GenerateScanPath(GameObject buildingObj, List<Vector3> footprintPoints) {
+    public List<Vector3> GenerateScanPath(GameObject buildingObj, List<Vector3> footprintPoints)
+    {
         ClearPath();
         helixNormals.Clear();
 
@@ -108,7 +112,8 @@ public class MissionGenerator : MonoBehaviour {
         lastcentroid = centroid;
 
         List<Vector3> sepFootprint = new List<Vector3>();
-        for (int i = 0; i < footprintPoints.Count; i++) {
+        for (int i = 0; i < footprintPoints.Count; i++)
+        {
             Vector3 p1 = footprintPoints[i];
             int k = i + 1;
             if (k >= footprintPoints.Count)
@@ -122,15 +127,18 @@ public class MissionGenerator : MonoBehaviour {
             float dist = Vector3.Distance(p1, p2);
             float maxSeg = maxSegmentLen;
 
-            if (dist > maxSeg) {
+            if (dist > maxSeg)
+            {
                 int steps = Mathf.CeilToInt(dist / maxSeg);
-                for (int j = 1; j < steps; j++) {
-                    sepFootprint.Add(Vector3.Lerp(p1, p2, (float) j / steps));
+                for (int j = 1; j < steps; j++)
+                {
+                    sepFootprint.Add(Vector3.Lerp(p1, p2, (float)j / steps));
                 }
             }
         }
 
-        for (int i = 0; i < sepFootprint.Count; i++) {
+        for (int i = 0; i < sepFootprint.Count; i++)
+        {
             Vector3 curr = sepFootprint[i];
             Vector3 prev = sepFootprint[(i - 1 + sepFootprint.Count) % sepFootprint.Count];
             Vector3 next = sepFootprint[(i + 1) % sepFootprint.Count];
@@ -156,7 +164,8 @@ public class MissionGenerator : MonoBehaviour {
             //move the offset of scandist
             Vector3 offsetPoint = curr + (vertexNormal * scanDistance);
 
-            if (orbitRing.Count == 0 || Vector3.Distance(offsetPoint, orbitRing[orbitRing.Count - 1]) > 0.1f) {
+            if (orbitRing.Count == 0 || Vector3.Distance(offsetPoint, orbitRing[orbitRing.Count - 1]) > 0.1f)
+            {
                 orbitRing.Add(offsetPoint);
                 orbitNormal.Add(vertexNormal);
             }
@@ -182,9 +191,11 @@ public class MissionGenerator : MonoBehaviour {
         Vector3 lastPoint = Vector3.zero;
         bool isFirst = true;
 
-        while (currentY < endY) {
-            for (int i = 0; i < orbitRing.Count; i++) {
-                float progress = (float) i / orbitRing.Count;
+        while (currentY < endY)
+        {
+            for (int i = 0; i < orbitRing.Count; i++)
+            {
+                float progress = (float)i / orbitRing.Count;
                 float heightOffset = verticalStep * progress;
                 float actualY = currentY + heightOffset;
 
@@ -199,18 +210,23 @@ public class MissionGenerator : MonoBehaviour {
 
                 Vector3 noCollisionPos = SolveCollision(propPos, pushDir);
 
-                if (!isFirst && Vector3.Distance(lastPoint, noCollisionPos) < 0.2f) {
+                if (!isFirst && Vector3.Distance(lastPoint, noCollisionPos) < 0.2f)
+                {
                     continue;
                 }
 
-                if (!isFirst) {
+                if (!isFirst)
+                {
                     List<Vector3> sightPoints = SolveSightline(lastPoint, noCollisionPos, pushDir);
                     finalPath.AddRange(sightPoints);
-                    for (int j = 0; j < sightPoints.Count; j++) {
+                    for (int j = 0; j < sightPoints.Count; j++)
+                    {
                         helixNormals.Add(orbitNormal[i]);
                     }
                     lastPoint = sightPoints[sightPoints.Count - 1];
-                } else {
+                }
+                else
+                {
                     finalPath.Add(noCollisionPos);
                     helixNormals.Add(orbitNormal[i]);
                     lastPoint = noCollisionPos;
@@ -232,17 +248,20 @@ public class MissionGenerator : MonoBehaviour {
         return finalPath;
     }
 
-    private Vector3 SolveCollision(Vector3 targetpos, Vector3 pushDir) {
+    private Vector3 SolveCollision(Vector3 targetpos, Vector3 pushDir)
+    {
         Vector3 curr = targetpos;
         float pushed = 0.0f;
         float step = 0.5f;
         float maxHorizPush = 3.0f;
 
-        while (isPosBlocked(curr)) {
+        while (isPosBlocked(curr))
+        {
             curr += pushDir * step;
             pushed += step;
 
-            if (pushed > maxHorizPush) {
+            if (pushed > maxHorizPush)
+            {
                 Debug.LogWarning("Max push exceeded, returning original position");
                 return findSafeAlt(targetpos);
             }
@@ -250,11 +269,13 @@ public class MissionGenerator : MonoBehaviour {
         return curr;
     }
 
-    private Vector3 findSafeAlt(Vector3 pos) {
+    private Vector3 findSafeAlt(Vector3 pos)
+    {
         Vector3 sky = new Vector3(pos.x, pos.y + 100.0f, pos.z);
         RaycastHit hit;
 
-        if (Physics.Raycast(sky, Vector3.down, out hit, 200f, collisionLayer)) {
+        if (Physics.Raycast(sky, Vector3.down, out hit, 200f, collisionLayer))
+        {
             float safeY = hit.point.y + droneRadius + 1.0f;
 
             safeY = Mathf.Max(safeY, pos.y);
@@ -265,38 +286,45 @@ public class MissionGenerator : MonoBehaviour {
         return pos;
     }
 
-    private float getHighestAlt(Vector3 prevPoint, Vector3 currPoint) {
+    private float getHighestAlt(Vector3 prevPoint, Vector3 currPoint)
+    {
         float highest = Mathf.Max(prevPoint.y, currPoint.y);
         float dist = Vector3.Distance(prevPoint, currPoint);
 
         int steps = Mathf.Max(1, Mathf.CeilToInt(dist / 0.5f));
 
-        for (int i = 1; i < steps; i++) {
-            float t = (float) i / steps;
+        for (int i = 1; i < steps; i++)
+        {
+            float t = (float)i / steps;
             Vector3 pos = Vector3.Lerp(prevPoint, currPoint, t);
 
             float alt = findSafeAlt(pos).y;
-            if (alt > highest) {
+            if (alt > highest)
+            {
                 highest = alt;
             }
         }
         return highest;
     }
 
-    private bool isPosBlocked(Vector3 pos) {
-        if (Physics.CheckSphere(pos, droneRadius, collisionLayer)) {
+    private bool isPosBlocked(Vector3 pos)
+    {
+        if (Physics.CheckSphere(pos, droneRadius, collisionLayer))
+        {
             return true;
         }
 
         Vector3 sky = new Vector3(pos.x, pos.y + 100.0f, pos.z);
-        if (Physics.Linecast(sky, pos, collisionLayer)) {
+        if (Physics.Linecast(sky, pos, collisionLayer))
+        {
             return true;
         }
 
         return false;
     }
 
-    private List<Vector3> SolveSightline(Vector3 prevPoint, Vector3 currPoint, Vector3 pushDir) {
+    private List<Vector3> SolveSightline(Vector3 prevPoint, Vector3 currPoint, Vector3 pushDir)
+    {
         List<Vector3> segPoints = new List<Vector3>();
         Vector3 finPoint = currPoint;
         RaycastHit hit;
@@ -306,38 +334,47 @@ public class MissionGenerator : MonoBehaviour {
         Vector3 dir = finPoint - prevPoint;
         float dist = dir.magnitude;
 
-        if (dist > 0.1f && Physics.SphereCast(prevPoint, droneRadius, dir.normalized, out hit, dist, collisionLayer)) {
+        if (dist > 0.1f && Physics.SphereCast(prevPoint, droneRadius, dir.normalized, out hit, dist, collisionLayer))
+        {
             float safeAlt = getHighestAlt(prevPoint, currPoint);
             Vector3 risePoint = new Vector3(prevPoint.x, safeAlt, prevPoint.z);
 
-            if (Vector3.Distance(prevPoint, risePoint) > 0.1f) {
+            if (Vector3.Distance(prevPoint, risePoint) > 0.1f)
+            {
                 segPoints.Add(risePoint);
             }
 
             Vector3 dropPoint = new Vector3(currPoint.x, safeAlt, currPoint.z);
-            if (Vector3.Distance(risePoint, dropPoint) > 0.1f) {
+            if (Vector3.Distance(risePoint, dropPoint) > 0.1f)
+            {
                 segPoints.Add(dropPoint);
             }
 
-            if (Vector3.Distance(dropPoint, currPoint) > 0.1f) {
+            if (Vector3.Distance(dropPoint, currPoint) > 0.1f)
+            {
                 segPoints.Add(currPoint);
             }
-        } else {
+        }
+        else
+        {
             segPoints.Add(currPoint);
         }
 
         return segPoints;
     }
 
-    public List<GPSWaypoint> ConvertToGPSCoordinates(List<Vector3> unityPath, List<Vector3> normals) {
+    public List<GPSWaypoint> ConvertToGPSCoordinates(List<Vector3> unityPath, List<Vector3> normals)
+    {
         List<GPSWaypoint> gpsPath = new List<GPSWaypoint>();
 
-        if (mapComponent == null) {
+        if (mapComponent == null)
+        {
             Debug.LogError("MissionGenerator no arcgis map reference");
             return gpsPath;
         }
 
-        for (int i = 0; i < unityPath.Count; i++) {
+        for (int i = 0; i < unityPath.Count; i++)
+        {
             Vector3 point = unityPath[i];
 
             //relative unity coords to gps coords
@@ -349,13 +386,16 @@ public class MissionGenerator : MonoBehaviour {
             wp.altitude = geoPos.Z;  // Z is alt
             wp.speed = flightSpeed;  // flight speed
 
-            if (normals != null && i < normals.Count) {
+            if (normals != null && i < normals.Count)
+            {
                 Vector3 neg = -normals[i];
                 float heading = Mathf.Atan2(neg.x, neg.z) * Mathf.Rad2Deg;
                 if (heading < 0)
                     heading += 360;
                 wp.heading = heading;
-            } else if (lastcentroid != Vector3.zero) {
+            }
+            else if (lastcentroid != Vector3.zero)
+            {
                 float vectx = unityPath[i].x - lastcentroid.x;
                 float vectz = unityPath[i].z - lastcentroid.z;
                 Vector3 dir = new Vector3(vectx, 0, vectz).normalized;
@@ -371,26 +411,30 @@ public class MissionGenerator : MonoBehaviour {
         return gpsPath;
     }
 
-    public void VisualizePath(List<Vector3> path) {
+    public void VisualizePath(List<Vector3> path)
+    {
         if (path.Count == 0)
             return;
 
         if (use3DTubes)
             lineRenderer.enabled = false;
-        else {
+        else
+        {
             lineRenderer.positionCount = path.Count;
             lineRenderer.SetPositions(path.ToArray());
         }
 
         GameObject prevP = null;
 
-        for (int i = 0; i < path.Count; i++) {
+        for (int i = 0; i < path.Count; i++)
+        {
             Vector3 currentPos = path[i];
 
             GameObject currP = CreateWaypointMarker(currentPos, i);
             tubeMap[currP] = new List<GameObject>();
 
-            if (use3DTubes && i > 0) {
+            if (use3DTubes && i > 0)
+            {
                 GameObject tube = CreateTubeSegment(path[i - 1], currentPos, i - 1);
 
                 tubeMap[currP].Add(tube);
@@ -400,11 +444,15 @@ public class MissionGenerator : MonoBehaviour {
         }
     }
 
-    private GameObject CreateWaypointMarker(Vector3 pos, int index) {
+    private GameObject CreateWaypointMarker(Vector3 pos, int index)
+    {
         GameObject wpObj;
-        if (waypointPrefab != null) {
+        if (waypointPrefab != null)
+        {
             wpObj = Instantiate(waypointPrefab, pos, Quaternion.identity);
-        } else {
+        }
+        else
+        {
             wpObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             var renderer = wpObj.GetComponent<MeshRenderer>();
             Shader shader = Shader.Find("Universal Render Pipeline/Lit");
@@ -423,15 +471,19 @@ public class MissionGenerator : MonoBehaviour {
         return wpObj;
     }
 
-    private GameObject CreateTubeSegment(Vector3 start, Vector3 end, int index) {
+    private GameObject CreateTubeSegment(Vector3 start, Vector3 end, int index)
+    {
         GameObject tube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         tube.name = "Tube_Segment_" + index;
         Collider col = tube.GetComponent<Collider>();
-        if (col != null) {
+        if (col != null)
+        {
             //TODO will set to off later
             col.enabled = false;
             col.isTrigger = false;
-        } else {
+        }
+        else
+        {
             Debug.LogWarning("Doesn't have collider!");
         }
 
@@ -456,21 +508,25 @@ public class MissionGenerator : MonoBehaviour {
         return tube;
     }
 
-    public float calculateWidthCoverage() {
+    public float calculateWidthCoverage()
+    {
         float view = (scanDistance * senzWidth) / focalLength;
         float cov = (view - maxSegmentLen) / view;
         return cov * 100.0f;
     }
 
-    public float calculateHeightCoverage() {
+    public float calculateHeightCoverage()
+    {
         float view = (scanDistance * senzHeight) / focalLength;
         float cov = (view - verticalStep) / view;
         return cov * 100.0f;
     }
 
-    public void ClearPath() {
+    public void ClearPath()
+    {
         lineRenderer.positionCount = 0;
-        foreach (var obj in spawnedObjects) {
+        foreach (var obj in spawnedObjects)
+        {
             if (obj != null)
                 Destroy(obj);
         }
@@ -478,39 +534,47 @@ public class MissionGenerator : MonoBehaviour {
         tubeMap.Clear();
     }
 
-    public bool HasMission() {
+    public bool HasMission()
+    {
         return spawnedObjects.Count > 0;
     }
 
-    public List<GameObject> GetMissionWaypoints() {
+    public List<GameObject> GetMissionWaypoints()
+    {
         List<GameObject> waypoints = new List<GameObject>();
-        foreach (GameObject wp in tubeMap.Keys) {
+        foreach (GameObject wp in tubeMap.Keys)
+        {
             waypoints.Add(wp);
         }
         return waypoints;
     }
 
-    public Vector3 GetMissionCenter(List<Vector3> points) {
+    public Vector3 GetMissionCenter(List<Vector3> points)
+    {
         if (points == null || points.Count == 0)
             return Vector3.zero;
 
         Vector3 sum = Vector3.zero;
         int count = points.Count;
-        foreach (Vector3 p in points) {
+        foreach (Vector3 p in points)
+        {
             sum += p;
         }
         return sum / count;
     }
 
-    public List<Vector3> GetMissionNormals(List<Vector3> points, Vector3 center) {
+    public List<Vector3> GetMissionNormals(List<Vector3> points, Vector3 center)
+    {
         List<Vector3> normals = new List<Vector3>();
         if (points == null || points.Count == 0)
             return normals;
 
-        foreach (Vector3 p in points) {
-            Vector3 dir = (p - center).normalized;
-            if (Physics.Raycast(p, dir, out RaycastHit hit, 100f)) {
-                Vector3 wallNormal = hit.normal;
+        foreach (Vector3 p in points)
+        {
+            Vector3 dir = (center - p).normalized;
+            if (Physics.Raycast(p, dir, out RaycastHit hit, 100f))
+            {
+                Vector3 wallNormal = -hit.normal;
                 normals.Add(wallNormal);
             }
         }

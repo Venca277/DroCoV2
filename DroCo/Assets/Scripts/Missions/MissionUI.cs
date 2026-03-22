@@ -15,7 +15,7 @@ public class MissionUI : MonoBehaviour {
     //public DroneMissionController droneMission;
     public MissionController missionController;
     public BuildingFetcher fetcher;
-    public Navigator navigator;
+    //public Navigator navigator;
 
     [Header("UI")]
     public GameObject missionPanel;
@@ -60,6 +60,16 @@ public class MissionUI : MonoBehaviour {
             Destroy(this);
         }
         Instance = this;
+    }
+
+    private void Update() {
+        if (hasMission && missionController.IsMissionRunning()) {
+            startMissionButton.GetComponentInChildren<TMP_Text>().text = "STOP";
+            startMissionButton.GetComponent<Image>().color = Color.red;
+        } else if (hasMission) {
+            startMissionButton.GetComponentInChildren<TMP_Text>().text = "START";
+            startMissionButton.GetComponent<Image>().color = Color.green;
+        }
     }
 
     private void Start() {
@@ -176,19 +186,6 @@ public class MissionUI : MonoBehaviour {
         string saved = missionController.SaveMission(currentMissionName);
         if (saved == null)
             Toast.call.Show("Error saving mission", 2.0f, true);
-    }
-
-    private void RegenerateMission() {
-        if (!hasMission)
-            return;
-
-        if (!missionController.Regenerate()) {
-            Toast.call.Show("Regeneration not available for loaded missions", 2.0f, true);
-            return;
-        }
-
-        Debug.Log("Mission regenerated");
-        RefreshList();
     }
 
     private void MissionNameChanged(string value) {
@@ -433,10 +430,19 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void MissionStart() {
+        if (hasMission && missionController.IsMissionRunning()) {
+            MissionStop();
+            return;
+        }
+
         if (WebSocketServer.Instance != null && WebSocketServer.Instance.IsRunning()) {
             missionController.MissionStart();
         } else {
             Toast.call.Show("Server not running, turn on server mode and connect clients", 3.0f);
         }
+    }
+
+    private void MissionStop() {
+        missionController.MissionStop();
     }
 }

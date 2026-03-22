@@ -77,6 +77,7 @@ public class MissionEditor : MonoBehaviour {
     }
 
     private void Selected() {
+        selectedWaypoints.RemoveAll(wp => wp == null);
         Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition); //cast ray
         RaycastHit[] getHit = Physics.RaycastAll(ray, 500f, manipLayer);
         //proceed to cast the ray
@@ -330,6 +331,7 @@ public class MissionEditor : MonoBehaviour {
     }
 
     private void Deselect() {
+        selectedWaypoints.RemoveAll(wp => wp == null);
         //deselect all
         if (gizmo != null) {
             Destroy(gizmo);

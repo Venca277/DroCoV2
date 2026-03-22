@@ -218,7 +218,7 @@ public class GameManager : Singleton<GameManager> {
     public void CenterMap(DroneFlightData flightData) {
         //modified - xsovakv00 11.2. 2026 - centering map after drone connects messes up with mission waypoints recalculation
         if (missionGenerator != null && missionGenerator.HasMission()) {
-            Debug.LogWarning("Not centering map because mission exists");
+            //Debug.LogWarning("Not centering map because mission exists");
             //Debug.Log("mission exists wont center");
             return;
         }

@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using System.IO;
 using System.Windows.Input;
 using Esri.GameEngine.Geometry;
+//using UnityEngine.TestTools.Constraints;
 
 public class MissionController : MonoBehaviour {
 
@@ -380,5 +381,14 @@ public class MissionController : MonoBehaviour {
     public void ClearBuilding() {
         currBuilding = null;
         currFootprint = null;
+    }
+
+    public bool IsMissionRunning() {
+        if (!settings.isWaypointMission) {
+            return navigator.isMissionRunning;
+        } else {
+            //TODO implement for waypoint mission
+            return false;
+        }
     }
 }
