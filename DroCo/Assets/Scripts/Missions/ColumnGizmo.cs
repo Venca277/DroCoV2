@@ -40,7 +40,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         if (Input.GetMouseButtonDown(0)) {
             Ray r = cam.ScreenPointToRay(Input.mousePosition);
             RaycastHit hit;
-            if (Physics.Raycast(r, out hit)) {
+            if (Physics.Raycast(r, out hit, 1000f, LayerMask.GetMask("Mission"))) {
                 Transform trans = hit.transform;
                 while (trans != null) {
                     if (trans.gameObject == yArrow) {
@@ -257,13 +257,14 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             //ring follow ground
             Vector3 currXZPos = groundArrowsContainer.transform.position;
             Ray gndRay = new Ray(currXZPos + Vector3.up * 1000f, Vector3.down);
-            RaycastHit gndHit;
-            if (Physics.Raycast(gndRay, out gndHit, 2000f, LayerMask.GetMask("Default"))) {
-                groundArrowsContainer.transform.position = new Vector3(
-                    currXZPos.x,
-                    gndHit.point.y,
-                    currXZPos.z
-                );
+            RaycastHit[] gndHits = Physics.RaycastAll(gndRay, 2000f, LayerMask.GetMask("Default"));
+            if (gndHits.Length > 0) {
+                float low = float.MaxValue;
+                foreach (RaycastHit hit in gndHits) {
+                    if (hit.point.y < low)
+                        low = hit.point.y;
+                }
+                groundArrowsContainer.transform.position = new Vector3(currXZPos.x, low, currXZPos.z);
             }
         }
     }

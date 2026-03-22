@@ -15,7 +15,8 @@ using UnityEditor;
 using Esri.GameEngine.View;
 using Unity.Mathematics;
 
-public class BuildingFetcher : MonoBehaviour {
+public class BuildingFetcher : MonoBehaviour
+{
     public Camera arcgisCamera;
     public OverpassClient overpass;
     public ArcGISMapComponent map;
@@ -34,7 +35,8 @@ public class BuildingFetcher : MonoBehaviour {
     private List<GameObject> buildings = new List<GameObject>();
     public Settings settings;
 
-    private void Awake() {
+    private void Awake()
+    {
         /*
         if (launchMissionButton != null) {
             launchMissionButton.interactable = false;
@@ -42,16 +44,20 @@ public class BuildingFetcher : MonoBehaviour {
         */
     }
 
-    private void Start() {
-        if (settings.range != "none") {
+    private void Start()
+    {
+        if (settings.range != "none")
+        {
             WaitForSeconds wait = new WaitForSeconds(15f);
             StartCoroutine(FetchArea(wait));
         }
     }
 
-    private void Update() {
+    private void Update()
+    {
         //double click detection
-        if (Input.GetMouseButtonDown(0)) {
+        if (Input.GetMouseButtonDown(0))
+        {
             float timeSinceLastClick = Time.time - lastClickTime;
             lastClickTime = Time.time;
 
@@ -63,13 +69,16 @@ public class BuildingFetcher : MonoBehaviour {
             Ray ray = arcgisCamera.ScreenPointToRay(Input.mousePosition);
             RaycastHit[] hits = Physics.RaycastAll(ray, 1000f);
             BuildingTag foundLoaded = null;
-            foreach (var hit in hits) {
+            foreach (var hit in hits)
+            {
                 foundLoaded = hit.collider.gameObject.GetComponent<BuildingTag>();
-                if (foundLoaded != null) {
+                if (foundLoaded != null)
+                {
                     break;
                 }
             }
-            if (foundLoaded != null) {
+            if (foundLoaded != null)
+            {
                 ClearSelection();
                 currentSelection = foundLoaded.gameObject;
                 buildingObjectReady = currentSelection;
@@ -83,7 +92,8 @@ public class BuildingFetcher : MonoBehaviour {
             if (!Physics.Raycast(ray, out RaycastHit normalhit, 1000f))
                 return;
 
-            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) {
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            {
                 return;
             }
             //convert to geocoordinates
@@ -94,17 +104,22 @@ public class BuildingFetcher : MonoBehaviour {
 
             Debug.Log($"DOUBLE-CLICK GEO: lat={lat}, lon={lon}");
 
-            StartCoroutine(overpass.FetchBuildingData(lat, lon, (jsonString) => {
-                if (string.IsNullOrEmpty(jsonString)) {
+            StartCoroutine(overpass.FetchBuildingData(lat, lon, (jsonString) =>
+            {
+                if (string.IsNullOrEmpty(jsonString))
+                {
                     Debug.LogError("OSM fetch failed or empty.");
                     return;
                 }
 
                 //json deserialize 
                 OSMRoot root = null;
-                try {
+                try
+                {
                     root = JsonConvert.DeserializeObject<OSMRoot>(jsonString);
-                } catch (System.Exception e) {
+                }
+                catch (System.Exception e)
+                {
                     Debug.LogError($"JSON Parse Error: {e.Message}");
                     return;
                 }
@@ -115,7 +130,8 @@ public class BuildingFetcher : MonoBehaviour {
                 //elements json object of the closest building
                 OSMElement building = OSMBuildingSelector.FindClosestBuilding(root, lat, lon);
 
-                if (building == null) {
+                if (building == null)
+                {
                     Debug.LogError("No building found near click.");
                     return;
                 }
@@ -138,8 +154,10 @@ public class BuildingFetcher : MonoBehaviour {
         }
     }
 
-    public void ClearSelection() {
-        if (currentSelection != null) {
+    public void ClearSelection()
+    {
+        if (currentSelection != null)
+        {
             Destroy(currentSelection);
             currentSelection = null;
         }
@@ -147,7 +165,8 @@ public class BuildingFetcher : MonoBehaviour {
             missionGenerator.ClearPath();
     }
 
-    private IEnumerator FetchArea(WaitForSeconds wait) {
+    private IEnumerator FetchArea(WaitForSeconds wait)
+    {
         yield return wait;
 
         ArcGISPoint cam = map.EngineToGeographic(arcgisCamera.transform.position);
@@ -155,13 +174,16 @@ public class BuildingFetcher : MonoBehaviour {
         double lon = cam.X;
 
         Debug.Log($"Loading models at: lat={lat}, lon={lon}");
-        foreach (var b in buildings) {
+        foreach (var b in buildings)
+        {
             Destroy(b);
         }
         buildings.Clear();
 
-        StartCoroutine(overpass.FetchBuildingArea(lat, lon, (jsonString) => {
-            if (string.IsNullOrEmpty(jsonString)) {
+        StartCoroutine(overpass.FetchBuildingArea(lat, lon, (jsonString) =>
+        {
+            if (string.IsNullOrEmpty(jsonString))
+            {
                 Debug.LogError("OSM fetch failed or empty.");
                 return;
             }
@@ -171,7 +193,8 @@ public class BuildingFetcher : MonoBehaviour {
             if (root == null || root.elements == null)
                 return;
 
-            foreach (var building in root.elements) {
+            foreach (var building in root.elements)
+            {
                 List<Vector3> unityRel = OSMToUnity.ConvertPolygonToUnity(building, map, 0);
                 CreateBuildingMesh(unityRel, building, false);
             }
@@ -179,13 +202,15 @@ public class BuildingFetcher : MonoBehaviour {
         }, settings.getRange()));
     }
 
-    public float GetAltitudeFromCast(Vector3 center) {
+    public float GetAltitudeFromCast(Vector3 center)
+    {
         Vector3 highPlace = new Vector3(center.x, 42069f, center.z);
         Ray down = new Ray(highPlace, Vector3.down);
 
         int layer = LayerMask.GetMask("Default");
         RaycastHit[] hits = Physics.RaycastAll(down, 100000f, layer);
-        if (hits.Length == 0) {
+        if (hits.Length == 0)
+        {
             Debug.LogWarning("No hit on ground!");
             return 0f;
         }
@@ -193,20 +218,23 @@ public class BuildingFetcher : MonoBehaviour {
         RaycastHit lowest = hits[0];
         float lowestY = lowest.point.y;
 
-        foreach (var hit in hits) {
-            if (hit.point.y < lowestY) {
+        foreach (var hit in hits)
+        {
+            if (hit.point.y < lowestY)
+            {
                 lowest = hit;
                 lowestY = hit.point.y;
             }
         }
 
         ArcGISPoint ground = map.EngineToGeographic(lowest.point);
-        float alt = (float) ground.Z;
+        float alt = (float)ground.Z;
         Debug.Log($"Ground: {alt}m");
         return alt;
     }
 
-    private float GetRealHeight(OSMElement building) {
+    private float GetRealHeight(OSMElement building)
+    {
         //TODO: think of more specific way to determine average floor height
         //perhaps get (hight of building arcgis model)/(floor count) = avg. floor height
 
@@ -218,16 +246,20 @@ public class BuildingFetcher : MonoBehaviour {
 
         //extract height from json object tags
         //TODO: this might never be used, remove later ???
-        if (building.tags.TryGetValue("height", out string heightStr)) {
+        if (building.tags.TryGetValue("height", out string heightStr))
+        {
             heightStr = heightStr.Replace("m", "").Trim();
-            if (float.TryParse(heightStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float h)) {
+            if (float.TryParse(heightStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float h))
+            {
                 return h;
             }
         }
 
         //calculate height from levels and average floor height
-        if (building.tags.TryGetValue("building:levels", out string levelsStr)) {
-            if (float.TryParse(levelsStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float l)) {
+        if (building.tags.TryGetValue("building:levels", out string levelsStr))
+        {
+            if (float.TryParse(levelsStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float l))
+            {
                 return (l * floorHeight) + 1.0f;
             }
         }
@@ -235,7 +267,8 @@ public class BuildingFetcher : MonoBehaviour {
         return defaultHeight;
     }
 
-    public void CreateBuildingMesh(List<Vector3> worldPoints, OSMElement buildingData, bool generateMission = true) {
+    public void CreateBuildingMesh(List<Vector3> worldPoints, OSMElement buildingData, bool generateMission = true)
+    {
         if (generateMission)
             ClearSelection();
 
@@ -271,9 +304,11 @@ public class BuildingFetcher : MonoBehaviour {
             currentSelection = new GameObject($"OSM_Selection_{buildingData.id}");
 
         GameObject buildingObj = null;
-        if (generateMission) {
+        if (generateMission)
+        {
             buildingObj = currentSelection;
-        } else
+        }
+        else
             buildingObj = new GameObject($"OSM_Building_{buildingData.id}");
 
         if (map != null)
@@ -309,7 +344,8 @@ public class BuildingFetcher : MonoBehaviour {
         float bottomY = -osmHeight;
         float inflation = 0.1f;
 
-        for (int i = 0; i < worldPoints.Count; i++) {
+        for (int i = 0; i < worldPoints.Count; i++)
+        {
             Vector3 offset = worldPoints[i] - centroidSeaLevel;
             Vector3 local = new Vector3(offset.x, 0, offset.z);
             Vector3 dir = local.normalized;
@@ -323,12 +359,14 @@ public class BuildingFetcher : MonoBehaviour {
 
         List<int> tris = new List<int>();
         int off = worldPoints.Count;
-        for (int i = 1; i < worldPoints.Count - 1; i++) {
+        for (int i = 1; i < worldPoints.Count - 1; i++)
+        {
             tris.Add(off);
             tris.Add(off + i);
             tris.Add(off + i + 1);
         }
-        for (int i = 0; i < worldPoints.Count; i++) {
+        for (int i = 0; i < worldPoints.Count; i++)
+        {
             int next = (i + 1) % worldPoints.Count;
             tris.Add(i);
             tris.Add(i + off);
@@ -360,7 +398,8 @@ public class BuildingFetcher : MonoBehaviour {
 
 
         Shader buildingShader = Shader.Find("Universal Render Pipeline/Lit");
-        if (buildingShader == null) {
+        if (buildingShader == null)
+        {
             buildingShader = Shader.Find("Universal Render Pipeline/UnLit");
         }
 
@@ -371,19 +410,20 @@ public class BuildingFetcher : MonoBehaviour {
         buildingMat.SetColor("_EmissionColor", new Color(0f, 0f, 1f) * 1.5f);
         buildingMat.SetFloat("_Surface", 1);
         buildingMat.SetFloat("_Blend", 0);
-        buildingMat.SetInt("_SrcBlend", (int) UnityEngine.Rendering.BlendMode.One);
-        buildingMat.SetInt("_DstBlend", (int) UnityEngine.Rendering.BlendMode.One);
+        buildingMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+        buildingMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One);
         buildingMat.SetFloat("_ZWrite", 0);
-        buildingMat.renderQueue = (int) UnityEngine.Rendering.RenderQueue.Transparent;
-        buildingMat.SetFloat("_Cull", (float) UnityEngine.Rendering.CullMode.Off);
-        buildingMat.SetInt("_ZTest", (int) UnityEngine.Rendering.CompareFunction.LessEqual);
+        buildingMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        buildingMat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
+        buildingMat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
 
         mr.material = buildingMat;
         mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
         // ==========================================
 
-        if (!generateMission) {
+        if (!generateMission)
+        {
             BuildingTag tag = buildingObj.AddComponent<BuildingTag>();
             tag.BuildingData = buildingData;
             tag.WorldPoints = worldPoints;
@@ -402,13 +442,15 @@ public class BuildingFetcher : MonoBehaviour {
     }
 
 
-    private void FloorSelect(GameObject buildingObj, Mesh mesh, float bottomY) {
+    private void FloorSelect(GameObject buildingObj, Mesh mesh, float bottomY)
+    {
         Bounds b = mesh.bounds;
-        b.center = new Vector3(b.center.x, bottomY, b.center.z);
+        b.center = new Vector3(b.center.x, bottomY + b.extents.y, b.center.z);
         FloorBoundsSelect(buildingObj, b);
     }
 
-    public void FloorBoundsSelect(GameObject buildingObj, Bounds bounds) {
+    public void FloorBoundsSelect(GameObject buildingObj, Bounds bounds)
+    {
         // highlight floor object
         GameObject floorObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         floorObj.name = "Floor_Highlight";
@@ -434,7 +476,8 @@ public class BuildingFetcher : MonoBehaviour {
 
         // universal material 
         Shader floorShader = Shader.Find("Universal Render Pipeline/Lit");
-        if (floorShader == null) {
+        if (floorShader == null)
+        {
             floorShader = Shader.Find("Universal Render Pipeline/UnLit");
         }
 
@@ -445,18 +488,19 @@ public class BuildingFetcher : MonoBehaviour {
         floorMat.SetColor("_EmissionColor", new Color(0f, 1f, 0f) * 0.5f);
         floorMat.SetFloat("_Surface", 1);
         floorMat.SetFloat("_Blend", 0);
-        floorMat.SetInt("_SrcBlend", (int) UnityEngine.Rendering.BlendMode.One);
-        floorMat.SetInt("_DstBlend", (int) UnityEngine.Rendering.BlendMode.One);
+        floorMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+        floorMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One);
         floorMat.SetFloat("_ZWrite", 0);
-        floorMat.renderQueue = (int) UnityEngine.Rendering.RenderQueue.Transparent;
-        floorMat.SetFloat("_Cull", (float) UnityEngine.Rendering.CullMode.Off);
-        floorMat.SetInt("_ZTest", (int) UnityEngine.Rendering.CompareFunction.LessEqual);
+        floorMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        floorMat.SetFloat("_Cull", (float)UnityEngine.Rendering.CullMode.Off);
+        floorMat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
 
         floorMr.material = floorMat;
         floorMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
     }
 
-    public void SetCurrentSelection(GameObject obj) {
+    public void SetCurrentSelection(GameObject obj)
+    {
         currentSelection = obj;
     }
 

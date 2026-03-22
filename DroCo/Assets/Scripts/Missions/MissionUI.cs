@@ -21,7 +21,7 @@ public class MissionUI : MonoBehaviour {
     public GameObject missionPanel;
     public Transform content;
     public Image missionImage;
-    public Button startMissionButton;
+    public Button startMissionButton; //button from topbar
     public Transform waypointContent;
     public Transform missionContent;
     public GameObject waypointUIPrefab;
@@ -357,6 +357,17 @@ public class MissionUI : MonoBehaviour {
         }
     }
 
+    public void DeleteSelectedMission() {
+        if (string.IsNullOrEmpty(selectedMissionPath)) {
+            Toast.call.Show("No mission selected", 2.0f, true);
+            return;
+        }
+
+        if (missionController.DeleteMission(selectedMissionPath)) {
+            DisplayAllMissions();
+        }
+    }
+
     private void SelectMission(string path, GameObject obj) {
         if (selectedMission != null)
             selectedMission.GetComponent<Image>().color = Color.white;
@@ -422,6 +433,10 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void MissionStart() {
-        missionController.MissionStart();
+        if (WebSocketServer.Instance != null && WebSocketServer.Instance.IsRunning()) {
+            missionController.MissionStart();
+        } else {
+            Toast.call.Show("Server not running, turn on server mode and connect clients", 3.0f);
+        }
     }
 }

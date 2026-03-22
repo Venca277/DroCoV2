@@ -308,7 +308,20 @@ public class MissionController : MonoBehaviour {
         SetBuilding(ghost, footprint);
 
         MissionUI.Instance?.SetNewMission(ghost, footprint, loaded.building.name);
+        Camera.main.transform.position = new Vector3(bounds.center.x, maxY + 20f, bounds.center.z);
+
         Toast.call.Show($"Mission loaded!", 2f, false);
+        return true;
+    }
+
+    public bool DeleteMission(string path) {
+        if (!File.Exists(path)) {
+            Toast.call.Show($"Mission file not found!", 2f, true);
+            return false;
+        }
+
+        File.Delete(path);
+        Toast.call.Show($"Mission deleted!", 2f, false);
         return true;
     }
 

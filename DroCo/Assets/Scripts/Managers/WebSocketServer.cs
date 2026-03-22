@@ -391,4 +391,8 @@ public class WebSocketServer : Singleton<WebSocketServer> {
             Server = null;
         }
     }
+
+    public bool IsRunning() {
+        return Server != null && Server.IsListening;
+    }
 }
