@@ -11,7 +11,7 @@ public class Navigator : MonoBehaviour {
     private Vector3 center;
 
     [Header("Navigation Settings")]
-    public float waypointReach = 1.0f; //update wp on distance
+    public float waypointReach = 0.5f; //update wp on distance
     public float maxSpeed = 1.0f; //forward
     public float maxYawSpeed = 15.0f; //turning
     public float maxAscentSpeed = 0.1f; //up and down
@@ -30,15 +30,30 @@ public class Navigator : MonoBehaviour {
     private Vector3 lastDronePos;
     private float lastDroneYaw;
     private float posTimer = 0f;
-    public float timeTakeOver = 3f; //seconds without movement = user took over
+    public float timeTakeOver = 10f; //seconds without movement = user took over
     public float waypointTime = 3f; //seconds after reaching a waypoint before stale check resumes
     private float waypointTimer = 0f;
+    private bool reverseOrder = false; //for testing, fly waypoints in reverse order
+    private bool rotating = false;
+
+    private float lastCmdPitch = 0f;
+    private float lastCmdRoll = 0f;
 
     public void StartMission(string droneID, List<Vector3> waypoints, List<Vector3> waypointNormals = null) {
         droneManager = FindObjectOfType<DroneManager>();
         this.droneID = droneID;
         this.waypoints = waypoints;
         this.waypointNormals = waypointNormals;
+
+        if (reverseOrder) {
+            this.waypoints = new List<Vector3>(waypoints);
+            this.waypoints.Reverse();
+            if (this.waypointNormals != null) {
+                this.waypointNormals = new List<Vector3>(waypointNormals);
+                this.waypointNormals.Reverse();
+            }
+        }
+
         currentWaypointIndex = 0;
         isMissionRunning = true;
         posTimer = 0f;
@@ -49,6 +64,7 @@ public class Navigator : MonoBehaviour {
         lastDronePos = droneManager != null ? GetDroneCurrentPosition() : Vector3.zero;
         lastDroneYaw = droneManager != null ? GetDroneCurrentYaw() : 0f;
         center = centerPoint(waypoints);
+        Debug.Log("WP count: " + this.waypoints.Count + " | Normal count: " + (this.waypointNormals != null ? this.waypointNormals.Count.ToString() : "null"));
     }
 
     void Update() {
@@ -81,7 +97,7 @@ public class Navigator : MonoBehaviour {
             posTimer = 0f;
             lastDronePos = dronePos; //keep updating so timer starts fresh after grace
             lastDroneYaw = droneYaw;
-        } else if (Vector3.Distance(dronePos, lastDronePos) < 0.05f && Mathf.Abs(Mathf.DeltaAngle(droneYaw, lastDroneYaw)) < 2.0f) {
+        } else if (Vector3.Distance(dronePos, lastDronePos) < 0.05f && Mathf.Abs(Mathf.DeltaAngle(droneYaw, lastDroneYaw)) < 2.0f && Mathf.Abs(lastCmdPitch) < 0.05f && Mathf.Abs(lastCmdRoll) < 0.05f) {
             posTimer += Time.deltaTime;
             if (posTimer > timeTakeOver) {
                 Debug.LogWarning("Mission stopped! Takeover");
@@ -94,6 +110,38 @@ public class Navigator : MonoBehaviour {
             lastDroneYaw = droneYaw;
         }
 
+        if (rotating) {
+            Debug.Log("Rotating at WP[" + currentWaypointIndex + "] normCount=" + (waypointNormals != null ? waypointNormals.Count.ToString() : "null"));
+            if (waypointNormals != null && currentWaypointIndex < waypointNormals.Count) {
+                Vector3 cornerNormal = waypointNormals[currentWaypointIndex];
+                cornerNormal.y = 0f;
+                cornerNormal.Normalize();
+                float cornerTargetYaw = Mathf.Atan2(cornerNormal.x, cornerNormal.z) * Mathf.Rad2Deg;
+                float cornerYawErr = Mathf.DeltaAngle(droneYaw, cornerTargetYaw);
+
+                //logging TODO remove
+                string rotLine = $"[{System.DateTime.Now:HH:mm:ss.fff}] WP[{currentWaypointIndex}] cornerYawErr={cornerYawErr:F1} target={cornerTargetYaw:F1} drone={droneYaw:F1}";
+                System.IO.File.AppendAllText(Application.persistentDataPath + "/rotation_log.txt", rotLine + "\n");
+
+                if (Mathf.Abs(cornerYawErr) < 5f) {
+                    // rotation done, move to next waypoint
+                    rotating = false;
+                    currentWaypointIndex++;
+                    posTimer = 0f;
+                    lastDronePos = dronePos;
+                    lastDroneYaw = droneYaw;
+                } else {
+                    // hover in place, only rotate
+                    float cornerCmdYaw = Mathf.Clamp(cornerYawErr * 1.5f, -maxYawSpeed, maxYawSpeed);
+                    SendControlCommand(0f, 0f, cornerCmdYaw, 0f, 0f);
+                }
+            } else {
+                rotating = false;
+                currentWaypointIndex++;
+            }
+            return;
+        }
+
         //next waypoint to travel to
         //calculate direction vector for yaw of the drone
         Vector3 targetPos = waypoints[currentWaypointIndex];
@@ -102,7 +150,8 @@ public class Navigator : MonoBehaviour {
 
         float targetYaw = droneYaw;
         if (waypointNormals != null && currentWaypointIndex < waypointNormals.Count) {
-            Vector3 normal = waypointNormals[currentWaypointIndex];
+            int normIndex = Mathf.Max(0, currentWaypointIndex - 1);
+            Vector3 normal = waypointNormals[normIndex];
             normal.y = 0f;
 
             if (normal.sqrMagnitude > 0.0001f) {
@@ -123,7 +172,17 @@ public class Navigator : MonoBehaviour {
         //return and go to next waypoint
         if (dist < waypointReach) {
             Debug.Log("Waypoint " + currentWaypointIndex + " reached!");
-            currentWaypointIndex++;
+
+            WebSocketServer.Instance?.BroadcastToAll("{\"type\":\"take_photo\"}");
+            string frame = droneManager?.GetCameraFrame(droneID);
+            if (!string.IsNullOrEmpty(frame)) {
+                byte[] jpg = System.Convert.FromBase64String(frame);
+                string path = Application.persistentDataPath + $"/wp_{currentWaypointIndex}.jpg";
+                System.IO.File.WriteAllBytes(path, jpg);
+                Toast.call.Show($"Photo taken", 1f);
+            }
+
+            rotating = true;
             posTimer = 0f;
             lastDronePos = dronePos;
             lastDroneYaw = droneYaw;
@@ -145,16 +204,17 @@ public class Navigator : MonoBehaviour {
         dirToTarget.y = 0; //only flat movement
 
         //calculate orientation
-        Vector3 droneForward = Quaternion.Euler(0, droneYaw, 0) * Vector3.forward;
-        Vector3 droneRight = Quaternion.Euler(0, droneYaw, 0) * Vector3.right;
+        Vector3 targetForward = Quaternion.Euler(0, targetYaw, 0) * Vector3.forward;
+        Vector3 targetRight = Quaternion.Euler(0, targetYaw, 0) * Vector3.right;
 
         //how much to fly forward and right to get to target
-        float distanceForward = Vector3.Dot(dirToTarget, droneForward);
-        float distanceRight = Vector3.Dot(dirToTarget, droneRight);
+        float distanceForward = Vector3.Dot(dirToTarget, targetForward);
+        float distanceRight = Vector3.Dot(dirToTarget, targetRight);
 
         //speed regulation
-        float cmdPitch = (flatDist > 0.5f) ? Mathf.Clamp(distanceForward * 0.5f, -maxSpeed, maxSpeed) : 0f;
-        float cmdRoll = (flatDist > 0.5f) ? Mathf.Clamp(distanceRight * 0.5f, -maxSpeed, maxSpeed) : 0f;
+        bool yawAligned = Mathf.Abs(yawErr) < 15f;
+        float cmdPitch = (flatDist > 0.5f && yawAligned) ? Mathf.Clamp(distanceForward * 0.5f, -maxSpeed, maxSpeed) : 0f;
+        float cmdRoll = (flatDist > 0.5f && yawAligned) ? Mathf.Clamp(distanceRight * 0.5f, -maxSpeed, maxSpeed) : 0f;
 
 
         //logging
@@ -173,6 +233,8 @@ public class Navigator : MonoBehaviour {
             fileCounter++;
         }
 
+        lastCmdPitch = cmdPitch;
+        lastCmdRoll = cmdRoll;
         SendControlCommand(cmdPitch, cmdRoll, cmdYaw, cmdHeight, 0f);
     }
 

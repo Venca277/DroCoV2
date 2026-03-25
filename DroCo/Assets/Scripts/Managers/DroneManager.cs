@@ -119,4 +119,12 @@ public class DroneManager : Singleton<DroneManager> {
     public void DestroyDrone(Drone drone) {
         Destroy(drone.gameObject);
     }
+
+    public string GetCameraFrame(string droneId) {
+        if (Drones.ContainsKey(droneId)) {
+            return Drones[droneId].FlightData?.frame;
+        } else {
+            return GetFirstDrone()?.FlightData?.frame;
+        }
+    }
 }

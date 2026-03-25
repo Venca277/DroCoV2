@@ -2,22 +2,23 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class Settings : MonoBehaviour {
 
     [Header("UI")]
     public MissionGenerator generator;
+    public BuildingFetcher buildingFetcher;
     public TMP_Dropdown droneType;
     public TMP_Dropdown controllMode;
     public TMP_Dropdown preloadOSM;
     public DroneDatabase database;
-
+    public Toggle showGhost;
 
     private List<string> drones = new List<string>();
     public bool isWaypointMission = false;
     public string range = "";
 
-    // Start is called before the first frame update
     void Start() {
         if (droneType != null) {
             droneType.ClearOptions();
@@ -41,12 +42,11 @@ public class Settings : MonoBehaviour {
             preloadOSM.value = 1;
             preloadOSM.onValueChanged.AddListener(OnPreloadOSMChanged);
         }
+        if (showGhost != null) {
+            showGhost.onValueChanged.AddListener(OnShowGhostChanged);
+        }
     }
 
-    // Update is called once per frame
-    void Update() {
-
-    }
 
     private void OnDroneTypeChanged(int index) {
         foreach (DroneProfile drone in database.drones) {
@@ -88,6 +88,10 @@ public class Settings : MonoBehaviour {
                 range = "500";
                 break;
         }
+    }
+
+    private void OnShowGhostChanged(bool value) {
+        buildingFetcher.SetShowGhost(value);
     }
 
     public int getRange() {

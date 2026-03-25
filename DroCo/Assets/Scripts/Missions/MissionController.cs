@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using System.IO;
 using System.Windows.Input;
 using Esri.GameEngine.Geometry;
+using System.Linq;
 //using UnityEngine.TestTools.Constraints;
 
 public class MissionController : MonoBehaviour {
@@ -324,6 +325,102 @@ public class MissionController : MonoBehaviour {
         File.Delete(path);
         Toast.call.Show($"Mission deleted!", 2f, false);
         return true;
+    }
+
+    public void DeleteWaypoints(List<GameObject> waypoints) {
+        if (waypoints == null || waypoints.Count == 0 || generator == null)
+            return;
+
+        //ordered
+        List<GameObject> ordered = generator.GetMissionWaypoints();
+        ordered.Sort((a, b) => {
+            int ia = int.Parse(a.name.Replace("WP_", ""));
+            int ib = int.Parse(b.name.Replace("WP_", ""));
+            return ia.CompareTo(ib);
+        });
+
+        HashSet<GameObject> deleting = new HashSet<GameObject>(waypoints);
+        List<GameObject> remaining = ordered.Where(wp => !deleting.Contains(wp)).ToList();
+
+        //get all tubes connected
+        HashSet<GameObject> deletingTubes = new HashSet<GameObject>();
+        foreach (GameObject wp in waypoints) {
+            if (wp == null || !generator.tubeMap.ContainsKey(wp))
+                continue;
+            foreach (GameObject tube in generator.tubeMap[wp])
+                deletingTubes.Add(tube);
+        }
+
+        //remove deleted tubes from remaining WP tubeMap
+        foreach (GameObject wp in remaining) {
+            if (generator.tubeMap.ContainsKey(wp))
+                generator.tubeMap[wp].RemoveAll(t => deletingTubes.Contains(t));
+        }
+
+        //destroy tubes
+        foreach (GameObject tube in deletingTubes) {
+            generator.spawnedObjects.Remove(tube);
+            Destroy(tube);
+        }
+
+        //destroy waypoints
+        foreach (GameObject wp in waypoints) {
+            if (wp == null)
+                continue;
+            generator.tubeMap.Remove(wp);
+            generator.spawnedObjects.Remove(wp);
+            Destroy(wp);
+        }
+
+        //reconnect the path after deleting
+        ConnectPath(ordered, deleting, remaining);
+
+        //refresh normals
+        if (generator.helixNormals != null) {
+            List<int> deleteIndices = ordered
+                .Select((wp, idx) => new { wp, idx })
+                .Where(x => deleting.Contains(x.wp))
+                .Select(x => x.idx)
+                .OrderByDescending(i => i)
+                .ToList();
+            foreach (int idx in deleteIndices)
+                if (idx < generator.helixNormals.Count)
+                    generator.helixNormals.RemoveAt(idx);
+        }
+
+        MissionUI.Instance?.RefreshListUI();
+    }
+
+    private void ConnectPath(List<GameObject> ordered, HashSet<GameObject> deleting, List<GameObject> remaining) {
+        if (generator.use3DTubes) {
+            for (int i = 0; i < remaining.Count - 1; i++) {
+                int idxA = ordered.IndexOf(remaining[i]);
+                int idxB = ordered.IndexOf(remaining[i + 1]);
+
+                if (idxB - idxA > 1) {
+                    Vector3 posA = remaining[i].transform.position;
+                    Vector3 posB = remaining[i + 1].transform.position;
+
+                    //calc pushdir for solving collisions
+                    Vector3 mid = (posA + posB) / 2f;
+                    Vector3 pushDir = (mid - missionCenter).normalized;
+                    pushDir.y = 0f;
+
+                    //used in generating path
+                    List<Vector3> bridgePoints = generator.SolveSightline(posA, posB, pushDir);
+
+                    //create tubes in disconnected
+                    Vector3 prev = posA;
+                    foreach (Vector3 bp in bridgePoints) {
+                        //temp point
+                        generator.AddTube(remaining[i], remaining[i + 1]);
+                        prev = bp;
+                    }
+                }
+            }
+        } else {
+            generator.UpdateLineRenderer(remaining.Select(wp => wp.transform.position).ToList());
+        }
     }
 
     public List<string> GetAllMissions() {

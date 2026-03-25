@@ -450,4 +450,8 @@ public class MissionUI : MonoBehaviour {
     private void MissionStop() {
         missionController.MissionStop();
     }
+
+    public void RefreshListUI() {
+        RefreshList();
+    }
 }
