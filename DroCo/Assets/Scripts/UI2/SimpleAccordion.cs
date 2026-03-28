@@ -8,9 +8,13 @@ public class SimpleAccordion : MonoBehaviour {
     public GameObject contentObject;
 
     public void Toggle() {
+        if (contentObject == null) {
+            return;
+        }
+
         bool currentState = contentObject.activeSelf;
         if (contentObject == null) {
-            Debug.LogWarning("Content object is not assigned in SimpleAccordion");
+            Debug.LogWarning("no content object");
             return;
         }
 

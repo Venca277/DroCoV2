@@ -121,6 +121,7 @@ public class ToolPanelControl : MonoBehaviour {
             StartRecording();
         } else {
             Toast.call.Show("Recording stopped", 1f);
+            StopRecording();
         }
     }
 

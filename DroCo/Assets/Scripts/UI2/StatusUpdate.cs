@@ -28,10 +28,25 @@ public class StatusUpdate : Singleton<StatusUpdate> {
     public Sprite warningCompass;
     public Sprite statusOK;
 
+    [Header("UI")]
+    public Image signal;
+    public TMP_Text latency;
+    public Image droneIcon;
+    public Image missionIcon;
+    public TMP_Text droneName;
+    public Image dronebarIcon;
+    public TMP_Text droneText;
+    public Image batteryIcon;
+    public Image state1;
+    public Image state2;
+    public Image state3;
+    public Image state4;
+    public Image state5;
+
     public void HandleStatusUpdate(DroneStatusData status) {
         //Debug.Log("Status update: " + status);
         //debug
-
+        /*
         if (status == null) {
             Debug.LogWarning("Received null status data");
             return;
@@ -64,24 +79,29 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             Debug.LogWarning("Could not find drone or mission icons or texts in stroke");
             return;
         }
-        droneIcon.preserveAspect = false;
-        missionIcon.preserveAspect = false;
-        signal.preserveAspect = false;
+        */
+
+        if (droneIcon != null)
+            droneIcon.preserveAspect = false;
+        if (missionIcon != null)
+            missionIcon.preserveAspect = false;
+        if (signal != null)
+            signal.preserveAspect = false;
 
 
-        if (status.drone_model != null && status.drone_model != "") {
+        if (status.drone_model != null && status.drone_model != "" && droneIcon != null && droneName != null) {
             droneIcon.sprite = droneActive;
             droneIcon.rectTransform.sizeDelta = new Vector2(80, 80);
             droneName.text = status.drone_model;
             droneName.fontSize = 36;
-        } else {
+        } else if (droneIcon != null && droneName != null) {
             droneIcon.sprite = drone;
             droneIcon.rectTransform.sizeDelta = new Vector2(80, 80);
             droneName.text = "Unknown aircraft";
             droneName.fontSize = 36;
         }
 
-        if (status.gps != null && status.gps.signal_level >= 0 && status.gps.signal_level <= 5) {
+        if (status.gps != null && status.gps.signal_level >= 0 && status.gps.signal_level <= 5 && signal != null && latency != null) {
             switch (status.gps.signal_level) {
                 case 0:
                     signal.sprite = noSignal;
@@ -113,7 +133,7 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             Debug.LogWarning("Invalid GPS signal");
         }
 
-
+        /*
         GameObject dronelist = GameObject.Find("DroneListContainer");
         if (dronelist == null) {
             Debug.LogWarning("Could not find DroneListContainer");
@@ -140,18 +160,19 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             Debug.LogWarning("Could not find droneText or batteryIcon or dronebarIcon in Row1");
             return;
         }
+        */
 
-        if (status.drone_model != null && status.drone_model != "") {
+        if (status.drone_model != null && status.drone_model != "" && droneText != null && dronebarIcon != null) {
             droneText.text = status.drone_model;
             droneText.fontSize = 30;
             dronebarIcon.sprite = droneActive;
-        } else {
+        } else if (droneText != null && dronebarIcon != null) {
             droneText.text = "Unknown aircraft";
             droneText.fontSize = 30;
             dronebarIcon.sprite = droneActive;
         }
 
-        if (status.battery != null) {
+        if (status.battery != null && batteryIcon != null) {
             if (status.battery.low_battery_warning) {
                 batteryIcon.sprite = batteryCritical;
             } else if (status.battery.remaining_percent >= 75) {
@@ -165,26 +186,26 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             }
         } else {
             Debug.LogWarning("Battery data is null");
-            batteryIcon.sprite = batteryCritical;
+            if (batteryIcon != null) {
+                batteryIcon.sprite = batteryCritical;
+            }
         }
-        batteryIcon.rectTransform.sizeDelta = new Vector2(40, 40);
-
-        Image state1 = row1status.Find("state1").GetComponent<Image>();
-        Image state2 = row1status.Find("state2").GetComponent<Image>();
-        Image state3 = row1status.Find("state3").GetComponent<Image>();
-        Image state4 = row1status.Find("state4").GetComponent<Image>();
-        Image state5 = row1status.Find("state5").GetComponent<Image>();
-        if (state1 == null || state2 == null || state3 == null || state4 == null || state5 == null) {
-            Debug.LogWarning("Could not find state images in Row1status");
-            return;
+        if (batteryIcon != null) {
+            batteryIcon.rectTransform.sizeDelta = new Vector2(40, 40);
         }
-        state1.gameObject.SetActive(false);
-        state2.gameObject.SetActive(false);
-        state3.gameObject.SetActive(false);
-        state4.gameObject.SetActive(false);
-        state5.gameObject.SetActive(false);
 
-        if (status.warnings != null) {
+        if (state1 != null)
+            state1.gameObject.SetActive(false);
+        if (state2 != null)
+            state2.gameObject.SetActive(false);
+        if (state3 != null)
+            state3.gameObject.SetActive(false);
+        if (state4 != null)
+            state4.gameObject.SetActive(false);
+        if (state5 != null)
+            state5.gameObject.SetActive(false);
+
+        if (status.warnings != null && state1 != null && state2 != null && state3 != null && state4 != null && state5 != null) {
             if (!status.warnings.strong_wind_warning && !status.warnings.max_height_reached && !status.warnings.max_distance_reached && !status.warnings.imu_preheating && !status.warnings.compass_error) {
                 state1.sprite = statusOK;
                 state1.gameObject.SetActive(true);
@@ -216,6 +237,8 @@ public class StatusUpdate : Singleton<StatusUpdate> {
                 }
             }
         } else {
+            if (state1 == null)
+                return;
             state1.sprite = statusOK;
             state1.gameObject.SetActive(true);
         }
