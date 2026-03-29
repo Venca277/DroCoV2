@@ -214,33 +214,6 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
-    /*
-    public List<GameObject> FindTube(GameObject waypoint) {
-        //casting with sphere search to detect any pipes
-        //any Tube_Segment objs are added to the list
-        Ray ray = new Ray(waypoint.transform.position, Vector3.zero);
-        Collider[] hits = Physics.OverlapSphere(waypoint.transform.position, 0.5f, LayerMask.GetMask("Mission"));
-        Debug.Log("Found " + hits.Length + " colliders near waypoint.");
-        List<GameObject> tubes = new List<GameObject>();
-
-        if (hits.Length > 0) {
-            foreach (var hit in hits) {
-                //Debug.Log("Hit object: " + hit.gameObject.name);
-
-                //check for tubes and save them
-                GameObject tube = hit.gameObject;
-                if (tube.name.StartsWith("Tube_Segment")) {
-                    tubes.Add(tube);
-                }
-                if (tubes.Count >= 2) {
-                    return tubes;
-                }
-            }
-        }
-        return tubes;
-    }
-    */
-
     public List<GameObject> findTubesWaypoint(GameObject wp) {
         if (missionGenerator != null && missionGenerator.tubeMap.ContainsKey(wp)) {
             return missionGenerator.tubeMap[wp];
@@ -338,6 +311,7 @@ public class MissionEditor : MonoBehaviour {
             gizmo = null;
         }
 
+        //destroy tubes and arrows for all selected
         for (int i = 0; i < selectedWaypoints.Count; i++) {
             selectedWaypoints[i].Select(false);
             GameObject cyl = selectedWaypoints[i].transform.Find("ColumnDown")?.gameObject;
@@ -389,17 +363,19 @@ public class MissionEditor : MonoBehaviour {
         Vector3 oldPos = wp.transform.position;
         wp.transform.position = newPos;
 
+        //move wp tubes if any
         if (savedTubes.ContainsKey(wp)) {
             List<GameObject> tubes = savedTubes[wp];
             UpdateTubes(tubes, oldPos, newPos);
             lastWPpositions[wp] = newPos;
         }
 
+        //update gizmo arrows if any
         GameObject wparrows = GameObject.Find("arrows");
         if (wparrows != null) {
             wparrows.transform.position = newPos;
         }
-
+        //update column arrows
         GameObject gndarrs = GameObject.Find("GroundArrows");
         if (gndarrs != null) {
             float y = gndarrs.transform.position.y;
@@ -408,10 +384,13 @@ public class MissionEditor : MonoBehaviour {
     }
 
     public void MoveWaypointColumn(List<WaypointSelect> colWaypoints, Vector3 offset) {
+        //move all waypoints in column
         foreach (WaypointSelect wp in colWaypoints) {
+            //add offset
             Vector3 oldPos = wp.transform.position;
             Vector3 newPos = oldPos + offset;
 
+            //move waypoint and update tubes
             wp.transform.position = newPos;
             if (savedTubes.ContainsKey(wp)) {
                 List<GameObject> tubes = savedTubes[wp];
@@ -425,14 +404,17 @@ public class MissionEditor : MonoBehaviour {
             }
         }
 
+        //updates gizmo arrows if any
         if (colWaypoints.Count > 0) {
             Vector3 mainWpPos = colWaypoints[0].transform.position;
 
+            //find and update waypoint arrows
             GameObject wparrows = GameObject.Find("arrows");
             if (wparrows != null) {
                 wparrows.transform.position = mainWpPos;
             }
 
+            //find and update column arrows
             GameObject gndarrs = GameObject.Find("GroundArrows");
             if (gndarrs != null) {
                 float y = gndarrs.transform.position.y;

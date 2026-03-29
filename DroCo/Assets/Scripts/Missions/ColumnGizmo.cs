@@ -30,6 +30,8 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
     public Transform wp;
     private List<WaypointSelect> Waypointscol = new List<WaypointSelect>();
     public bool dragging => draggingArrow != null;
+    private bool created = false;
+
     void Start() {
         cam = Camera.main;
         missioneditor = FindObjectOfType<MissionEditor>();
@@ -38,6 +40,11 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
     void Update() {
         //decide which arrow we drag
         if (Input.GetMouseButtonDown(0)) {
+            if (created) {
+                created = false;
+                return;
+            }
+
             Ray r = cam.ScreenPointToRay(Input.mousePosition);
             RaycastHit hit;
             if (Physics.Raycast(r, out hit, 1000f, LayerMask.GetMask("Mission"))) {
@@ -222,6 +229,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
                 diskGraphic = xzDisk.GetComponentsInChildren<Renderer>();
 
                 hideCol(); //only in drag
+                created = true;
             }
         }
     }

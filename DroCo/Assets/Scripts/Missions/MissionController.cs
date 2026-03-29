@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Newtonsoft.Json;
 using System.IO;
-using System.Windows.Input;
+//using System.Windows.Input;
 using Esri.GameEngine.Geometry;
 using System.Linq;
 //using UnityEngine.TestTools.Constraints;
@@ -27,11 +27,14 @@ public class MissionController : MonoBehaviour {
     public float paramOverlap = 0.5f;
 
     public MissionData currentMission;
-    public List<Vector3> curentMissionNormals;
+    //TODO delete later
+    //public List<Vector3> curentMissionNormals;
     public List<Vector3> currentMissionSticks;
     public Vector3 missionCenter;
     private GameObject currBuilding;
     private List<Vector3> currFootprint;
+    //private List<Vector3> deletedPositions = new List<Vector3>();
+    //private bool redeleting = false;
 
     void Update() {
         if (droneManager == null)
@@ -105,7 +108,6 @@ public class MissionController : MonoBehaviour {
         //sending over network
         //SendMissionToNetwork(complexMission);
         currentMission = complexMission;
-
     }
 
     private void UpdateMissionFromWaypoints() {
@@ -152,12 +154,18 @@ public class MissionController : MonoBehaviour {
         if (currBuilding == null || currFootprint == null)
             return false;
 
+        //generator updates path on parameter change
         generator.ClearPath();
         List<Vector3> path = generator.GenerateScanPath(currBuilding, currFootprint);
         if (path == null || path.Count == 0)
             return false;
 
+
         PrepareMission(currBuilding, currFootprint);
+        //Debug.Log($"[Regenerate] deletedPositions.Count = {deletedPositions.Count}");
+        //if (deletedPositions.Count > 0)
+        //    RedoDeletions();
+
         return true;
     }
 
@@ -180,14 +188,16 @@ public class MissionController : MonoBehaviour {
     }
 
     public void MissionStart() {
-        //TODO dronemissioncontroller is deprecated might delete later
+        //loads mission into drone over network in waypoint mission
+        //starts mission with virtual sticks navigator takes control
         if (currentMission != null) {
             UpdateMissionFromWaypoints();
             if (settings.isWaypointMission) {
                 SendMissionToNetwork(currentMission);
             } else {
+                float photoDistance = generator.CalculatePhotoDistance(generator.calculateWidthCoverage() / 100f);
                 List<Vector3> normals = generator.GetMissionNormals(currentMissionSticks, generator.GetMissionCenter(currentMissionSticks));
-                navigator.StartMission("", currentMissionSticks, normals);
+                navigator.StartMission("", currentMissionSticks, normals, photoDistance);
             }
         } else {
             Debug.LogError("No mission ready to start. Try selecting a building first.");
@@ -195,6 +205,8 @@ public class MissionController : MonoBehaviour {
     }
 
     public void MissionStop() {
+        //use controller command to stop with virtual sticks
+        //use json command in waypoint mission to stop
         if (!settings.isWaypointMission) {
             navigator.StopDrone();
         } else {
@@ -208,9 +220,11 @@ public class MissionController : MonoBehaviour {
         if (currentMission == null)
             return null;
 
+        //update mission
         UpdateMissionFromWaypoints();
         currentMission.route.name = name;
 
+        //prepare model to save
         Collider col = currBuilding.GetComponent<Collider>();
         BuildingInfo info = new BuildingInfo();
         info.name = name;
@@ -222,6 +236,7 @@ public class MissionController : MonoBehaviour {
         info.minY = (float) down.Z;
         info.maxY = (float) top.Z;
 
+        //save footprint as gps, ghost can be created
         info.footprint = new List<GpsCorner>();
         foreach (Vector3 p in currFootprint) {
             ArcGISPoint geo = generator.mapComponent.EngineToGeographic(p);
@@ -231,10 +246,12 @@ public class MissionController : MonoBehaviour {
             info.footprint.Add(corner);
         }
 
+        //create save struct
         MissionSave save = new MissionSave();
         save.mission = currentMission;
         save.building = info;
 
+        //serialize and proceed to save
         string json = JsonConvert.SerializeObject(save);
         string folder = Path.Combine(Application.persistentDataPath, "Missions");
         Directory.CreateDirectory(folder);
@@ -252,6 +269,7 @@ public class MissionController : MonoBehaviour {
             return false;
         }
 
+        //deserialize file
         MissionSave loaded = JsonConvert.DeserializeObject<MissionSave>(File.ReadAllText(path));
 
         if (loaded == null || loaded.mission.route == null || loaded.mission.route.segments == null || loaded.mission.route.segments.Count == 0) {
@@ -259,12 +277,14 @@ public class MissionController : MonoBehaviour {
             return false;
         }
 
+        //load points
         List<Point> points = loaded.mission.route.segments[0].multipoint.points;
         if (points == null || points.Count < 3) {
             Toast.call.Show($"Mission file contains no points!", 2f, true);
             return false;
         }
 
+        //update parameters from file to generator so regeneration is possible
         Parameters param = loaded.mission.route.segments[0].parameters;
         if (param != null) {
             generator.scanDistance = param.scanDistance;
@@ -273,6 +293,7 @@ public class MissionController : MonoBehaviour {
             paramOverlap = param.overlapForward;
         }
 
+        //load footprint
         List<Vector3> footprint = new List<Vector3>();
         if (loaded.building?.footprint != null) {
             foreach (GpsCorner cor in loaded.building.footprint) {
@@ -286,6 +307,7 @@ public class MissionController : MonoBehaviour {
         float minY = generator.mapComponent.GeographicToEngine(new ArcGISPoint(lon, lat, loaded.building.minY, new ArcGISSpatialReference(4326))).y;
         float maxY = generator.mapComponent.GeographicToEngine(new ArcGISPoint(lon, lat, loaded.building.maxY, new ArcGISSpatialReference(4326))).y;
 
+        //create ghost building
         Bounds bounds = new Bounds(footprint[0], Vector3.zero);
         foreach (Vector3 p in footprint) {
             bounds.Encapsulate(p);
@@ -296,6 +318,7 @@ public class MissionController : MonoBehaviour {
         box.center = new Vector3(0, (minY + maxY) / 2f, 0);
         box.size = new Vector3(bounds.size.x, maxY - minY, bounds.size.z);
 
+        //load path from gps to relative
         List<Vector3> flightpath = new List<Vector3>();
         for (int i = 1; i < points.Count - 1; i++) {
             ArcGISPoint geo = new ArcGISPoint(points[i].longitude, points[i].latitude, points[i].altitude, new ArcGISSpatialReference(4326));
@@ -303,12 +326,14 @@ public class MissionController : MonoBehaviour {
             flightpath.Add(pos);
         }
 
+        //hand over operations to generator
         generator.ClearPath();
         generator.VisualizePath(flightpath);
         currentMission = loaded.mission;
 
         SetBuilding(ghost, footprint);
 
+        //update UI about new mission, focus camera
         MissionUI.Instance?.SetNewMission(ghost, footprint, loaded.building.name);
         Camera.main.transform.position = new Vector3(bounds.center.x, maxY + 20f, bounds.center.z);
 
@@ -375,6 +400,8 @@ public class MissionController : MonoBehaviour {
         //reconnect the path after deleting
         ConnectPath(ordered, deleting, remaining);
 
+        ClipFootprint();
+
         //refresh normals
         if (generator.helixNormals != null) {
             List<int> deleteIndices = ordered
@@ -387,7 +414,6 @@ public class MissionController : MonoBehaviour {
                 if (idx < generator.helixNormals.Count)
                     generator.helixNormals.RemoveAt(idx);
         }
-
         MissionUI.Instance?.RefreshListUI();
     }
 
@@ -423,7 +449,91 @@ public class MissionController : MonoBehaviour {
         }
     }
 
+    private void ClipFootprint() {
+        //get remaining waypoints sorted by WP index
+        List<GameObject> remaining = generator.GetMissionWaypoints();
+        if (remaining == null || remaining.Count < 2)
+            return;
+
+        //sort wps by index
+        remaining.Sort((a, b) => {
+            if (int.TryParse(a.name.Replace("WP_", ""), out int ia) &&
+                int.TryParse(b.name.Replace("WP_", ""), out int ib))
+                return ia.CompareTo(ib);
+            return 0;
+        });
+
+        //calculate center of remaining wps for clip
+        Vector3 remainingCenter = Vector3.zero;
+        foreach (var wp in remaining)
+            remainingCenter += new Vector3(wp.transform.position.x, 0, wp.transform.position.z);
+        remainingCenter /= remaining.Count;
+        List<Vector3> clipped = new List<Vector3>(currFootprint);
+
+        for (int i = 0; i < remaining.Count - 1; i++) {
+            if (!int.TryParse(remaining[i].name.Replace("WP_", ""), out int idxA))
+                continue;
+            if (!int.TryParse(remaining[i + 1].name.Replace("WP_", ""), out int idxB))
+                continue;
+
+            //creating shortcuts
+            if (idxB - idxA <= 1)
+                continue;
+
+            //clip footprint by line between wps
+            Vector3 A = remaining[i].transform.position;
+            Vector3 B = remaining[i + 1].transform.position;
+            A.y = 0;
+            B.y = 0;
+
+            //clip over disconnected segment
+            List<Vector3> res = ClipByLine(clipped, A, B, remainingCenter);
+            if (res.Count >= 3)
+                clipped = res;
+            else
+                Debug.LogWarning("clipping skipped");
+        }
+
+        if (clipped.Count >= 3) {
+            currFootprint = clipped;
+            Debug.Log("footprint updated");
+        }
+    }
+
+    private List<Vector3> ClipByLine(List<Vector3> polygon, Vector3 A, Vector3 B, Vector3 keepSide) {
+        Vector3 lineDir = (B - A).normalized;
+        // Perpendicular in XZ plane
+        Vector3 normal = new Vector3(-lineDir.z, 0, lineDir.x);
+        // Orient toward centroid
+        if (Vector3.Dot(keepSide - A, normal) < 0)
+            normal = -normal;
+
+        List<Vector3> result = new List<Vector3>();
+        int n = polygon.Count;
+
+        for (int i = 0; i < n; i++) {
+            Vector3 curr = polygon[i];
+            Vector3 next = polygon[(i + 1) % n];
+
+            // Signed distances to the clip line (XZ only)
+            float d1 = Vector3.Dot(new Vector3(curr.x, 0, curr.z) - A, normal);
+            float d2 = Vector3.Dot(new Vector3(next.x, 0, next.z) - A, normal);
+
+            if (d1 >= 0)
+                result.Add(curr); // inside, keep (with original Y)
+
+            // Edge crosses the boundary -> add intersection point
+            if ((d1 < 0 && d2 > 0) || (d1 > 0 && d2 < 0)) {
+                float t = d1 / (d1 - d2);
+                result.Add(Vector3.Lerp(curr, next, t));
+            }
+        }
+
+        return result;
+    }
+
     public List<string> GetAllMissions() {
+        //list all json files in Missions folder
         string folder = Path.Combine(Application.persistentDataPath, "Missions");
         Directory.CreateDirectory(folder);
         string[] files = Directory.GetFiles(folder, "*.json");
@@ -457,7 +567,6 @@ public class MissionController : MonoBehaviour {
 
     public void SetFlightSpeed(float value) {
         generator.flightSpeed = value;
-        // pozor: flightSpeed neregeneruje cestu, jen mění rychlost
     }
 
     public void SetUse3DTubes(bool value) {
@@ -472,7 +581,7 @@ public class MissionController : MonoBehaviour {
 
     public void SetBuilding(GameObject building, List<Vector3> footprint) {
         currBuilding = building;
-        currFootprint = footprint;
+        currFootprint = new List<Vector3>(footprint);
     }
 
     public void ClearBuilding() {
@@ -482,7 +591,7 @@ public class MissionController : MonoBehaviour {
 
     public bool IsMissionRunning() {
         if (!settings.isWaypointMission) {
-            return navigator.isMissionRunning;
+            return navigator.IsMissionRunning();
         } else {
             //TODO implement for waypoint mission
             return false;

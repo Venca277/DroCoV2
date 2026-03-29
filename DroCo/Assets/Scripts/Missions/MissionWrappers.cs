@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Newtonsoft.Json;
 using System.IO;
-using System.Windows.Input;
+//using System.Windows.Input;
 using Esri.GameEngine.Geometry;
 
 public class NetworkWrapper {
@@ -26,4 +26,17 @@ public class BuildingInfo {
 public class GpsCorner {
     public double lat;
     public double lon;
+}
+
+public class ControlCommand {
+    public string type = "control_command";
+    public ControlCommandData data;
+}
+
+public class ControlCommandData {
+    public float pitch;
+    public float roll;
+    public float yaw;
+    public float throttle;
+    public float gimbal_pitch;
 }

@@ -1,13 +1,14 @@
 using UnityEngine;
 using System.Collections.Generic;
 using WebSocketSharp;
+using Newtonsoft.Json;
 
 public class Navigator : MonoBehaviour {
     [Header("Mission Data")]
     public List<Vector3> waypoints;
     public List<Vector3> waypointNormals;
     private int currentWaypointIndex = 0;
-    public bool isMissionRunning = false;
+    private bool isMissionRunning = false;
     private Vector3 center;
 
     [Header("Navigation Settings")]
@@ -38,11 +39,14 @@ public class Navigator : MonoBehaviour {
 
     private float lastCmdPitch = 0f;
     private float lastCmdRoll = 0f;
+    private Vector3 lastPhotoPos;
+    private float photoDistance;
 
-    public void StartMission(string droneID, List<Vector3> waypoints, List<Vector3> waypointNormals = null) {
+    public void StartMission(string droneID, List<Vector3> waypoints, List<Vector3> waypointNormals = null, float photoDistance = 3f) {
         droneManager = FindObjectOfType<DroneManager>();
         this.droneID = droneID;
         this.waypoints = waypoints;
+        this.photoDistance = photoDistance;
         this.waypointNormals = waypointNormals;
 
         if (reverseOrder) {
@@ -116,12 +120,12 @@ public class Navigator : MonoBehaviour {
                 Vector3 cornerNormal = waypointNormals[currentWaypointIndex];
                 cornerNormal.y = 0f;
                 cornerNormal.Normalize();
-                float cornerTargetYaw = Mathf.Atan2(cornerNormal.x, cornerNormal.z) * Mathf.Rad2Deg;
+                float cornerTargetYaw = Mathf.Atan2(-cornerNormal.x, -cornerNormal.z) * Mathf.Rad2Deg;
                 float cornerYawErr = Mathf.DeltaAngle(droneYaw, cornerTargetYaw);
 
                 //logging TODO remove
-                string rotLine = $"[{System.DateTime.Now:HH:mm:ss.fff}] WP[{currentWaypointIndex}] cornerYawErr={cornerYawErr:F1} target={cornerTargetYaw:F1} drone={droneYaw:F1}";
-                System.IO.File.AppendAllText(Application.persistentDataPath + "/rotation_log.txt", rotLine + "\n");
+                //string rotLine = $"[{System.DateTime.Now:HH:mm:ss.fff}] WP[{currentWaypointIndex}] cornerYawErr={cornerYawErr:F1} target={cornerTargetYaw:F1} drone={droneYaw:F1}";
+                //System.IO.File.AppendAllText(Application.persistentDataPath + "/rotation_log.txt", rotLine + "\n");
 
                 if (Mathf.Abs(cornerYawErr) < 5f) {
                     // rotation done, move to next waypoint
@@ -156,7 +160,7 @@ public class Navigator : MonoBehaviour {
 
             if (normal.sqrMagnitude > 0.0001f) {
                 normal.Normalize();
-                targetYaw = Mathf.Atan2(normal.x, normal.z) * Mathf.Rad2Deg;
+                targetYaw = Mathf.Atan2(-normal.x, -normal.z) * Mathf.Rad2Deg;
             }
         } else {
             if (dirToTargetYaw.magnitude > 0.1f) {
@@ -168,10 +172,7 @@ public class Navigator : MonoBehaviour {
         float dist = Vector3.Distance(dronePos, targetPos);
         float flatDist = Vector3.Distance(new Vector3(dronePos.x, 0, dronePos.z), new Vector3(targetPos.x, 0, targetPos.z));
 
-        //waypoint reached
-        //return and go to next waypoint
-        if (dist < waypointReach) {
-            Debug.Log("Waypoint " + currentWaypointIndex + " reached!");
+        if (!rotating && Vector3.Distance(dronePos, lastPhotoPos) >= photoDistance) {
 
             WebSocketServer.Instance?.BroadcastToAll("{\"type\":\"take_photo\"}");
             string frame = droneManager?.GetCameraFrame(droneID);
@@ -181,7 +182,13 @@ public class Navigator : MonoBehaviour {
                 System.IO.File.WriteAllBytes(path, jpg);
                 Toast.call.Show($"Photo taken", 1f);
             }
+            lastPhotoPos = dronePos;
+        }
 
+        //waypoint reached
+        //return and go to next waypoint
+        if (dist < waypointReach) {
+            Debug.Log("Waypoint " + currentWaypointIndex + " reached!");
             rotating = true;
             posTimer = 0f;
             lastDronePos = dronePos;
@@ -216,7 +223,6 @@ public class Navigator : MonoBehaviour {
         float cmdPitch = (flatDist > 0.5f && yawAligned) ? Mathf.Clamp(distanceForward * 0.5f, -maxSpeed, maxSpeed) : 0f;
         float cmdRoll = (flatDist > 0.5f && yawAligned) ? Mathf.Clamp(distanceRight * 0.5f, -maxSpeed, maxSpeed) : 0f;
 
-
         //logging
         logFileTimer += Time.deltaTime;
         if (logFileTimer >= 1f) {
@@ -239,18 +245,15 @@ public class Navigator : MonoBehaviour {
     }
 
     private void SendControlCommand(float pitch, float roll, float yaw, float throttle, float gimbal) {
-        string jsonMsg = $@"{{
-            ""type"":""control_command"",
-            ""data"":{{
-                ""pitch"":{pitch.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)},
-                ""roll"":{roll.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)},
-                ""yaw"":{yaw.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)},
-                ""throttle"":{throttle.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)},
-                ""gimbal_pitch"":{gimbal.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}
-            }}
-        }}";
-
-        WebSocketServer.Instance?.BroadcastToAll(jsonMsg);
+        ControlCommand command = new ControlCommand();
+        ControlCommandData data = new ControlCommandData();
+        data.pitch = pitch;
+        data.roll = roll;
+        data.yaw = yaw;
+        data.throttle = throttle;
+        data.gimbal_pitch = gimbal;
+        command.data = data;
+        WebSocketServer.Instance?.BroadcastToAll(JsonConvert.SerializeObject(command));
     }
 
     public void StopDrone() {
@@ -275,5 +278,13 @@ public class Navigator : MonoBehaviour {
             return 0f;
         }
         return (float) drone.FlightData.aircraft_orientation.yaw;
+    }
+
+    public void SetMissionRunning(bool running) {
+        isMissionRunning = running;
+    }
+
+    public bool IsMissionRunning() {
+        return isMissionRunning;
     }
 }

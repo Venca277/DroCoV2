@@ -246,12 +246,14 @@ public class HandleArrows : MonoBehaviour {
         if (cam == null)
             return;
 
+        //update size with changing camera distance
         float distance = Vector3.Distance(cam.transform.position, transform.position);
         float newScale = distance * screensize;
         transform.localScale = Vector3.one * newScale;
     }
 
     private void ResetHighlight(Renderer[] grafics) {
+        //reset glow effect
         foreach (Renderer r in grafics) {
             Material mat = r.material;
             mat.DisableKeyword("_EMISSION");
@@ -259,6 +261,7 @@ public class HandleArrows : MonoBehaviour {
     }
 
     private void SetHighlight(Renderer[] grafics, Color color) {
+        //set up glow effect
         foreach (Renderer g in grafics) {
             Material mat = g.material;
             mat.EnableKeyword("_EMISSION");

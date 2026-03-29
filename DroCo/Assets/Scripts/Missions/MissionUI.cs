@@ -12,16 +12,16 @@ public class MissionUI : MonoBehaviour {
 
     [Header("Classes")]
     public MissionGenerator generator;
-    //public DroneMissionController droneMission;
     public MissionController missionController;
     public BuildingFetcher fetcher;
-    //public Navigator navigator;
 
     [Header("UI")]
     public GameObject missionPanel;
     public Transform content;
     public Image missionImage;
     public Button startMissionButton; //button from topbar
+    public TMP_Text startMissionButtonText;
+    public Image startMissionButtonImage;
     public Transform waypointContent;
     public Transform missionContent;
     public GameObject waypointUIPrefab;
@@ -64,11 +64,11 @@ public class MissionUI : MonoBehaviour {
 
     private void Update() {
         if (hasMission && missionController.IsMissionRunning()) {
-            startMissionButton.GetComponentInChildren<TMP_Text>().text = "STOP";
-            startMissionButton.GetComponent<Image>().color = Color.red;
+            startMissionButtonText.text = "STOP";
+            startMissionButtonImage.color = Color.red;
         } else if (hasMission) {
-            startMissionButton.GetComponentInChildren<TMP_Text>().text = "START";
-            startMissionButton.GetComponent<Image>().color = Color.green;
+            startMissionButtonText.text = "START";
+            startMissionButtonImage.color = Color.green;
         }
     }
 
@@ -83,13 +83,11 @@ public class MissionUI : MonoBehaviour {
             missionName.text = "NewMission";
         }
         if (scanDist != null)
-            scanDist.onValueChanged.AddListener(ScanDistChanged);
+            scanDist.onEndEdit.AddListener(ScanDistChanged);
         if (verticalStep != null)
             verticalStep.onValueChanged.AddListener(VerticalStepChanged);
         if (use3Dtubes != null)
             use3Dtubes.onValueChanged.AddListener(Use3DTubesChanged);
-        if (showGhost != null)
-            showGhost.onValueChanged.AddListener(showGhostChanged);
         if (color != null)
             color.onValueChanged.AddListener(ColorChanged);
         if (waypointSize != null)
@@ -240,13 +238,6 @@ public class MissionUI : MonoBehaviour {
         }
     }
 
-    private void showGhostChanged(bool value) {
-        if (!regenerate)
-            return;
-        fetcher.showGhost = value;
-        //generator.showGhost = value;
-    }
-
     private void WaypointSizeChanged(string value) {
         if (!regenerate)
             return;
@@ -378,8 +369,10 @@ public class MissionUI : MonoBehaviour {
         if (Camera.main != null) {
             Vector3 off = new Vector3(0, 5, -10);
             if (wp.name.StartsWith("WP_") && int.TryParse(wp.name.Substring(3), out int index)) {
-                Vector3 normal = generator.helixNormals[index];
-                off = normal * 3f + Vector3.up * 2f;
+                if (index < generator.helixNormals.Count) {
+                    Vector3 normal = generator.helixNormals[index];
+                    off = normal * 3f + Vector3.up * 2f;
+                }
             }
             Camera.main.transform.position = wp.transform.position + off;
             Camera.main.transform.LookAt(wp.transform);
