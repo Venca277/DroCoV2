@@ -125,6 +125,9 @@ public class MissionEditor : MonoBehaviour {
                     selectedPoint.Select(true);
                     UIGizmo.SetSelectedWaypoint(selectedPoint.transform);
 
+                    //TODO remove
+                    Debug.Log(selectedPoint.name);
+
                     //one is selected and no arrows currently
                     //TODO: support gizmoing with more selected
                     if (selectedWaypoints.Count == 1 && gizmo == null) {
@@ -174,7 +177,7 @@ public class MissionEditor : MonoBehaviour {
                         savedTubes.Clear();
                         lastWPpositions.Clear();
                         foreach (var waypoint in selectedWaypoints) {
-                            savedTubes[waypoint] = findTubesWaypoint(waypoint.gameObject);
+                            savedTubes[waypoint] = FindTubesWaypoint(waypoint.gameObject);
                             lastWPpositions[waypoint] = waypoint.transform.position;
                         }
 
@@ -194,7 +197,7 @@ public class MissionEditor : MonoBehaviour {
             savedTubes.Clear();
             lastWPpositions.Clear();
             foreach (var waypoint in selectedWaypoints) {
-                savedTubes[waypoint] = findTubesWaypoint(waypoint.gameObject);
+                savedTubes[waypoint] = FindTubesWaypoint(waypoint.gameObject);
                 lastWPpositions[waypoint] = waypoint.transform.position;
             }
 
@@ -214,7 +217,7 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
-    public List<GameObject> findTubesWaypoint(GameObject wp) {
+    public List<GameObject> FindTubesWaypoint(GameObject wp) {
         if (missionGenerator != null && missionGenerator.tubeMap.ContainsKey(wp)) {
             return missionGenerator.tubeMap[wp];
         }
@@ -288,8 +291,6 @@ public class MissionEditor : MonoBehaviour {
                 //if moved wps have any tubes we update them
                 for (int i = 0; i < selectedWaypoints.Count; i++) {
                     if (savedTubes.ContainsKey(selectedWaypoints[i])) {
-                        lastWPpositions.ContainsKey(selectedWaypoints[i]);
-
                         List<GameObject> tubes = savedTubes[selectedWaypoints[i]];
                         Vector3 oldwaypoint = lastWPpositions[selectedWaypoints[i]];
 
@@ -337,7 +338,7 @@ public class MissionEditor : MonoBehaviour {
         lastWPpositions.Clear();
 
         //save tubes and positions for drag
-        savedTubes[wp] = findTubesWaypoint(wp.gameObject);
+        savedTubes[wp] = FindTubesWaypoint(wp.gameObject);
         lastWPpositions[wp] = wp.transform.position;
         mainCamera.GetComponent<ArcGISCameraControllerTouch>().enabled = false;
     }
@@ -349,7 +350,7 @@ public class MissionEditor : MonoBehaviour {
 
         //save tubes and positions for drag
         foreach (WaypointSelect wp in colWaypoints) {
-            savedTubes[wp] = findTubesWaypoint(wp.gameObject);
+            savedTubes[wp] = FindTubesWaypoint(wp.gameObject);
             lastWPpositions[wp] = wp.transform.position;
         }
         mainCamera.GetComponent<ArcGISCameraControllerTouch>().enabled = false;
@@ -397,7 +398,7 @@ public class MissionEditor : MonoBehaviour {
                 UpdateTubes(tubes, oldPos, newPos);
                 lastWPpositions[wp] = newPos;
             } else {
-                savedTubes[wp] = findTubesWaypoint(wp.gameObject);
+                savedTubes[wp] = FindTubesWaypoint(wp.gameObject);
                 List<GameObject> tubes = savedTubes[wp];
                 UpdateTubes(tubes, oldPos, newPos);
                 lastWPpositions[wp] = newPos;

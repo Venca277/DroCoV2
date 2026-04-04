@@ -28,7 +28,10 @@ public class MissionUI : MonoBehaviour {
 
     [Header("Parameters")]
     public TMP_InputField missionName;
+    public TMP_Dropdown missionType;
     public TMP_InputField scanDist;
+    public TMP_InputField widthOverlap;
+    public TMP_InputField heightOverlap;
     public TMP_InputField verticalStep;
     public TMP_InputField segmentLen;
     public TMP_InputField waypointSize;
@@ -98,6 +101,12 @@ public class MissionUI : MonoBehaviour {
             segmentLen.onValueChanged.AddListener(SegmentLenChanged);
         if (startMissionButton != null)
             startMissionButton.onClick.AddListener(MissionStart);
+        if (widthOverlap != null)
+            widthOverlap.onEndEdit.AddListener(WidthOverlapChanged);
+        if (heightOverlap != null)
+            heightOverlap.onEndEdit.AddListener(HeightOverlapChanged);
+        if (missionType != null)
+            missionType.onValueChanged.AddListener(MissionTypeChanged);
     }
 
     public bool HasMission() {
@@ -130,7 +139,13 @@ public class MissionUI : MonoBehaviour {
         if (flightSpeed != null)
             flightSpeed.text = generator.flightSpeed.ToString();
         if (coverage != null)
-            getCoverage();
+            GetCoverage();
+        if (widthOverlap != null)
+            widthOverlap.text = (generator.widthOverlap * 100f).ToString();
+        if (heightOverlap != null)
+            heightOverlap.text = (generator.heightOverlap * 100f).ToString();
+        if (missionType != null)
+            SetMissionTypes();
         RefreshList();
         regenerate = true;
     }
@@ -150,6 +165,17 @@ public class MissionUI : MonoBehaviour {
         color.RefreshShownValue();
     }
 
+    private void SetMissionTypes() {
+        if (missionType == null)
+            return;
+
+        missionType.options.Clear();
+        missionType.options.Add(new TMP_Dropdown.OptionData("Horizontal"));
+        missionType.options.Add(new TMP_Dropdown.OptionData("Vertical"));
+        missionType.value = 0;
+        missionType.RefreshShownValue();
+    }
+
     private void DeleteMission() {
         if (!hasMission)
             return;
@@ -164,6 +190,7 @@ public class MissionUI : MonoBehaviour {
         currentMissionName = "";
         missionImage.sprite = missionOFF;
         content.gameObject.SetActive(false);
+        missionController.SetSnakeMode(false);
         startMissionButton.enabled = false;
         startMissionButton.interactable = false;
 
@@ -202,7 +229,7 @@ public class MissionUI : MonoBehaviour {
             return;
         if (float.TryParse(value, out float dist) && dist > 0) {
             missionController.SetScanDistance(dist);
-            getCoverage();
+            GetCoverage();
             RefreshList();
         } else {
             Toast.call.Show("Invalid scan distance value", 2.0f, true);
@@ -214,7 +241,7 @@ public class MissionUI : MonoBehaviour {
             return;
         if (float.TryParse(value, out float step) && step > 0) {
             missionController.SetVerticalStep(step);
-            getCoverage();
+            GetCoverage();
             RefreshList();
         } else {
             Toast.call.Show("Invalid vertical step value", 2.0f, true);
@@ -231,10 +258,14 @@ public class MissionUI : MonoBehaviour {
     private void ColorChanged(int index) {
         if (!regenerate)
             return;
-        Color[] colors = new Color[] { Color.red, Color.green, Color.blue, Color.yellow, Color.cyan, Color.magenta };
+
+        string[] colors = new string[] { "#EF476F", "#06D6A0", "#118AB2", "#FFD166", "#00B4D8", "#EC4899" };
         if (index < colors.Length) {
-            missionController.SetPathColor(colors[index]);
-            RefreshList();
+            if (ColorUtility.TryParseHtmlString(colors[index], out Color col)) {
+                missionController.SetPathColor(col);
+                color.GetComponent<Image>().color = col;
+                RefreshList();
+            }
         }
     }
 
@@ -249,9 +280,11 @@ public class MissionUI : MonoBehaviour {
     }
 
     private void FlightSpeedChanged(string value) {
+        if (!regenerate)
+            return;
         if (float.TryParse(value, out float speed) && speed > 0) {
             missionController.SetFlightSpeed(speed);
-            getCoverage();
+            GetCoverage();
         } else {
             Toast.call.Show("Invalid flight speed value", 2.0f, true);
         }
@@ -266,6 +299,49 @@ public class MissionUI : MonoBehaviour {
         } else {
             Toast.call.Show("Invalid segment length value", 2.0f, true);
         }
+    }
+
+    private void WidthOverlapChanged(string value) {
+        if (!regenerate)
+            return;
+        if (float.TryParse(value, out float overlap)) {
+            float dec = overlap / 100f;
+            if (dec <= 0.95 && dec >= 0.1) {
+                missionController.SetWidthOverlap(dec);
+                GetCoverage();
+                RefreshList();
+            } else {
+                Toast.call.Show("Invalid width overlap value (10% - 95%)", 2.0f, true);
+            }
+        } else {
+            Toast.call.Show("Invalid width overlap value (10% - 95%)", 2.0f, true);
+        }
+    }
+
+    private void HeightOverlapChanged(string value) {
+        if (!regenerate)
+            return;
+        if (float.TryParse(value, out float overlap)) {
+            float dec = overlap / 100f;
+            if (dec <= 0.95 && dec >= 0.1) {
+                missionController.SetHeightOverlap(dec);
+                GetCoverage();
+                RefreshList();
+            } else {
+                Toast.call.Show("Invalid height overlap value (10% - 95%)", 2.0f, true);
+            }
+        } else {
+            Toast.call.Show("Invalid height overlap value (10% - 95%)", 2.0f, true);
+        }
+    }
+
+    private void MissionTypeChanged(int index) {
+        if (!regenerate)
+            return;
+
+        missionController.SetMissionType(index);
+        GetCoverage();
+        RefreshList();
     }
 
     private void RefreshList() {
@@ -291,14 +367,14 @@ public class MissionUI : MonoBehaviour {
             Button btn = wpObj.GetComponent<Button>();
             if (btn != null) {
                 GameObject clickedWP = wp;
-                btn.onClick.AddListener(() => selectedUIWaypoint(clickedWP));
+                btn.onClick.AddListener(() => SelectedUIWaypoint(clickedWP));
             }
         }
 
         if (waypointContent.gameObject.activeInHierarchy) {
             LayoutRebuilder.ForceRebuildLayoutImmediate(waypointContent.GetComponent<RectTransform>());
         }
-        getCoverage();
+        GetCoverage();
     }
 
     public void DisplayAllMissions() {
@@ -365,22 +441,20 @@ public class MissionUI : MonoBehaviour {
         obj.GetComponent<Image>().color = new Color(0.5f, 0.8f, 1f);
     }
 
-    public void selectedUIWaypoint(GameObject wp) {
+    public void SelectedUIWaypoint(GameObject wp) {
         if (Camera.main != null) {
             Vector3 off = new Vector3(0, 5, -10);
             if (wp.name.StartsWith("WP_") && int.TryParse(wp.name.Substring(3), out int index)) {
-                if (index < generator.helixNormals.Count) {
-                    Vector3 normal = generator.helixNormals[index];
-                    off = normal * 3f + Vector3.up * 2f;
-                }
+                if (index < generator.helixNormals.Count)
+                    off = missionController.GetNormal(index) * 3f + Vector3.up * 2f;
             }
             Camera.main.transform.position = wp.transform.position + off;
             Camera.main.transform.LookAt(wp.transform);
         }
-        StartCoroutine(shineWp(wp));
+        StartCoroutine(ShineWp(wp));
     }
 
-    private IEnumerator shineWp(GameObject wp) {
+    private IEnumerator ShineWp(GameObject wp) {
         Renderer renderer = wp.GetComponent<Renderer>();
         if (renderer == null) {
             Debug.LogWarning("Waypoint has no Renderer");
@@ -405,18 +479,18 @@ public class MissionUI : MonoBehaviour {
         mat.SetColor("_EmissionColor", Color.black);
     }
 
-    private void getCoverage() {
+    private void GetCoverage() {
         if (coverage != null) {
-            float covW = generator.calculateWidthCoverage();
-            float covH = generator.calculateHeightCoverage();
-            string covWtext = getCoverageText(covW);
-            string covHtext = getCoverageText(covH);
+            float covW = generator.CalculateWidthCoverage();
+            float covH = generator.CalculateHeightCoverage();
+            string covWtext = GetCoverageText(covW);
+            string covHtext = GetCoverageText(covH);
 
             coverage.text = $"W: {covWtext} H: {covHtext}";
         }
     }
 
-    private string getCoverageText(float cov) {
+    private string GetCoverageText(float cov) {
         if (cov < 0f)
             return $"<color=red>{cov:F1}%</color>";
         else if (cov < 50f)

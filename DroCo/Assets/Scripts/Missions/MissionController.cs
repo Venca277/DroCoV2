@@ -35,6 +35,8 @@ public class MissionController : MonoBehaviour {
     private List<Vector3> currFootprint;
     //private List<Vector3> deletedPositions = new List<Vector3>();
     //private bool redeleting = false;
+    public bool autoConnect = false;
+    private bool snakeMode = false;
 
     void Update() {
         if (droneManager == null)
@@ -150,9 +152,118 @@ public class MissionController : MonoBehaviour {
         segment.multipoint.points.Add(p);
     }
 
+    private void RegenerateSnake() {
+        if (currBuilding == null || currFootprint == null || currFootprint.Count < 2)
+            return;
+
+        List<GameObject> allWPs = generator.GetMissionWaypoints();
+        if (allWPs == null || allWPs.Count == 0)
+            return;
+
+        allWPs.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
+
+        float newScanDist = generator.scanDistance;
+        Vector3 footprintCenter = generator.GetMissionCenter(currFootprint);
+        footprintCenter.y = 0;
+
+        foreach (GameObject wp in allWPs) {
+            Vector3 pos = new Vector3(wp.transform.position.x, 0, wp.transform.position.z);
+
+            float minDist = float.MaxValue;
+            Vector3 bestProjection = pos;
+            Vector3 bestNormal = Vector3.forward;
+
+            for (int i = 0; i < currFootprint.Count; i++) {
+                Vector3 A = new Vector3(currFootprint[i].x, 0, currFootprint[i].z);
+                Vector3 B = new Vector3(currFootprint[(i + 1) % currFootprint.Count].x, 0, currFootprint[(i + 1) % currFootprint.Count].z);
+
+                Vector3 edge = B - A;
+                float edgeLen = edge.magnitude;
+                if (edgeLen < 0.001f)
+                    continue;
+                Vector3 edgeDir = edge / edgeLen;
+
+                float dot = Vector3.Dot(pos - A, edgeDir);
+                float t = Mathf.Clamp01(dot / edgeLen);
+                Vector3 projection = A + edgeDir * (t * edgeLen);
+
+                float dist = Vector3.Distance(pos, projection);
+                if (dist < minDist) {
+                    minDist = dist;
+                    bestProjection = projection;
+                    // kolmice na hranu v XZ rovine
+                    Vector3 normal = new Vector3(edgeDir.z, 0, -edgeDir.x);
+                    // orientuj ven od stredu
+                    if (Vector3.Dot(bestProjection - footprintCenter, normal) < 0)
+                        normal = -normal;
+                    bestNormal = normal;
+                }
+            }
+
+            wp.transform.position = new Vector3(
+                bestProjection.x + bestNormal.x * newScanDist,
+                wp.transform.position.y,
+                bestProjection.z + bestNormal.z * newScanDist
+            );
+        }
+
+        generator.RecalculateSteps();
+        Collider col = currBuilding.GetComponent<Collider>();
+        float baseY = col != null ? col.bounds.min.y + 2.0f : allWPs[0].transform.position.y;
+        float maxY = col != null ? col.bounds.max.y + 1.0f : float.MaxValue;
+
+        Dictionary<int, List<GameObject>> byLevel = new Dictionary<int, List<GameObject>>();
+        foreach (GameObject wp in allWPs) {
+            int lvl = generator.GetWaypointLevel(wp);
+            if (!byLevel.ContainsKey(lvl))
+                byLevel[lvl] = new List<GameObject>();
+            byLevel[lvl].Add(wp);
+        }
+        List<int> levels = new List<int>(byLevel.Keys);
+        levels.Sort();
+        for (int i = 0; i < levels.Count; i++) {
+            float newY = Mathf.Min(baseY + i * generator.verticalStep, maxY);
+            foreach (GameObject wp in byLevel[levels[i]]) {
+                Vector3 p = wp.transform.position;
+                wp.transform.position = new Vector3(p.x, newY, p.z);
+            }
+        }
+
+        /*
+        HashSet<GameObject> tubesToDestroy = new HashSet<GameObject>();
+        foreach (GameObject wp in allWPs) {
+            if (!generator.tubeMap.ContainsKey(wp))
+                continue;
+            foreach (GameObject tube in generator.tubeMap[wp])
+                if (tube != null)
+                    tubesToDestroy.Add(tube);
+            generator.tubeMap[wp].Clear();
+        }
+        foreach (GameObject tube in tubesToDestroy) {
+            generator.spawnedObjects.Remove(tube);
+            Destroy(tube);
+        }
+        */
+        generator.RemoveTubes(allWPs);
+
+        if (generator.use3DTubes) {
+            for (int i = 0; i < allWPs.Count - 1; i++)
+                generator.AddTube(allWPs[i], allWPs[i + 1]);
+        } else {
+            generator.UpdateLineRenderer(allWPs.Select(wp => wp.transform.position).ToList());
+        }
+
+        snakeMode = true;
+    }
+
     public bool Regenerate() {
         if (currBuilding == null || currFootprint == null)
             return false;
+
+        if (snakeMode) {
+            RegenerateSnake();
+            return false;
+        }
 
         //generator updates path on parameter change
         generator.ClearPath();
@@ -162,9 +273,6 @@ public class MissionController : MonoBehaviour {
 
 
         PrepareMission(currBuilding, currFootprint);
-        //Debug.Log($"[Regenerate] deletedPositions.Count = {deletedPositions.Count}");
-        //if (deletedPositions.Count > 0)
-        //    RedoDeletions();
 
         return true;
     }
@@ -195,9 +303,8 @@ public class MissionController : MonoBehaviour {
             if (settings.isWaypointMission) {
                 SendMissionToNetwork(currentMission);
             } else {
-                float photoDistance = generator.CalculatePhotoDistance(generator.calculateWidthCoverage() / 100f);
                 List<Vector3> normals = generator.GetMissionNormals(currentMissionSticks, generator.GetMissionCenter(currentMissionSticks));
-                navigator.StartMission("", currentMissionSticks, normals, photoDistance);
+                navigator.StartMission("", currentMissionSticks, normals, generator.photoInterval);
             }
         } else {
             Debug.LogError("No mission ready to start. Try selecting a building first.");
@@ -358,15 +465,12 @@ public class MissionController : MonoBehaviour {
 
         //ordered
         List<GameObject> ordered = generator.GetMissionWaypoints();
-        ordered.Sort((a, b) => {
-            int ia = int.Parse(a.name.Replace("WP_", ""));
-            int ib = int.Parse(b.name.Replace("WP_", ""));
-            return ia.CompareTo(ib);
-        });
+        ordered.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
 
         HashSet<GameObject> deleting = new HashSet<GameObject>(waypoints);
         List<GameObject> remaining = ordered.Where(wp => !deleting.Contains(wp)).ToList();
 
+        /*
         //get all tubes connected
         HashSet<GameObject> deletingTubes = new HashSet<GameObject>();
         foreach (GameObject wp in waypoints) {
@@ -387,7 +491,11 @@ public class MissionController : MonoBehaviour {
             generator.spawnedObjects.Remove(tube);
             Destroy(tube);
         }
+        */
+        generator.RemoveTubes(waypoints, remaining);
+        generator.RemoveWaypoint(waypoints);
 
+        /*
         //destroy waypoints
         foreach (GameObject wp in waypoints) {
             if (wp == null)
@@ -396,12 +504,28 @@ public class MissionController : MonoBehaviour {
             generator.spawnedObjects.Remove(wp);
             Destroy(wp);
         }
-
-        //reconnect the path after deleting
-        ConnectPath(ordered, deleting, remaining);
+        */
 
         ClipFootprint();
 
+        //reconnect the path after deleting
+        if (autoConnect) {
+            Debug.LogWarning("Running auto connect");
+            ConnectPath(ordered, deleting, remaining);
+        } else {
+            Debug.LogWarning("Running level reconnect");
+            generator.ReconnectLevelPath(remaining);
+            snakeMode = true;
+        }
+
+        List<int> idx = new List<int>();
+        for (int i = 0; i < ordered.Count; i++) {
+            if (deleting.Contains(ordered[i]))
+                idx.Add(i);
+        }
+        generator.RemoveNormalsIdx(idx);
+
+        /*
         //refresh normals
         if (generator.helixNormals != null) {
             List<int> deleteIndices = ordered
@@ -414,6 +538,7 @@ public class MissionController : MonoBehaviour {
                 if (idx < generator.helixNormals.Count)
                     generator.helixNormals.RemoveAt(idx);
         }
+        */
         MissionUI.Instance?.RefreshListUI();
     }
 
@@ -438,8 +563,7 @@ public class MissionController : MonoBehaviour {
                     //create tubes in disconnected
                     Vector3 prev = posA;
                     foreach (Vector3 bp in bridgePoints) {
-                        //temp point
-                        generator.AddTube(remaining[i], remaining[i + 1]);
+                        generator.AddTube(remaining[i], remaining[i + 1], prev, bp);
                         prev = bp;
                     }
                 }
@@ -456,12 +580,7 @@ public class MissionController : MonoBehaviour {
             return;
 
         //sort wps by index
-        remaining.Sort((a, b) => {
-            if (int.TryParse(a.name.Replace("WP_", ""), out int ia) &&
-                int.TryParse(b.name.Replace("WP_", ""), out int ib))
-                return ia.CompareTo(ib);
-            return 0;
-        });
+        remaining.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
 
         //calculate center of remaining wps for clip
         Vector3 remainingCenter = Vector3.zero;
@@ -471,10 +590,8 @@ public class MissionController : MonoBehaviour {
         List<Vector3> clipped = new List<Vector3>(currFootprint);
 
         for (int i = 0; i < remaining.Count - 1; i++) {
-            if (!int.TryParse(remaining[i].name.Replace("WP_", ""), out int idxA))
-                continue;
-            if (!int.TryParse(remaining[i + 1].name.Replace("WP_", ""), out int idxB))
-                continue;
+            int idxA = MissionGenerator.GetWaypointIdx(remaining[i]);
+            int idxB = MissionGenerator.GetWaypointIdx(remaining[i + 1]);
 
             //creating shortcuts
             if (idxB - idxA <= 1)
@@ -545,6 +662,10 @@ public class MissionController : MonoBehaviour {
         return currBuilding;
     }
 
+    public Vector3 GetNormal(int idx) {
+        return generator.GetNormal(idx);
+    }
+
     public void SetScanDistance(float value) {
         generator.scanDistance = value;
         Regenerate();
@@ -579,14 +700,42 @@ public class MissionController : MonoBehaviour {
         Regenerate();
     }
 
+    public void SetWidthOverlap(float value) {
+        generator.widthOverlap = value;
+        generator.RecalculateSteps();
+        Regenerate();
+    }
+
+    public void SetHeightOverlap(float value) {
+        generator.heightOverlap = value;
+        generator.RecalculateSteps();
+        Regenerate();
+    }
+
     public void SetBuilding(GameObject building, List<Vector3> footprint) {
         currBuilding = building;
         currFootprint = new List<Vector3>(footprint);
+        snakeMode = false;
+    }
+
+    public void SetMissionType(int index) {
+        snakeMode = false;
+        if (index == 0) {
+            generator.missionType = MissionType.Horizontal;
+        } else if (index == 1) {
+            generator.missionType = MissionType.Vertical;
+        }
+        Regenerate();
+    }
+
+    public void SetSnakeMode(bool value) {
+        snakeMode = value;
     }
 
     public void ClearBuilding() {
         currBuilding = null;
         currFootprint = null;
+        snakeMode = false;
     }
 
     public bool IsMissionRunning() {

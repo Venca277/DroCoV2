@@ -39,6 +39,8 @@ public class Navigator : MonoBehaviour {
 
     private float lastCmdPitch = 0f;
     private float lastCmdRoll = 0f;
+    private float lastCmdYaw = 0f;
+    private float lastCmdHeight = 0f;
     private Vector3 lastPhotoPos;
     private float photoDistance;
 
@@ -48,6 +50,12 @@ public class Navigator : MonoBehaviour {
         this.waypoints = waypoints;
         this.photoDistance = photoDistance;
         this.waypointNormals = waypointNormals;
+        rotating = false;
+        lastCmdPitch = 0f;
+        lastCmdRoll = 0f;
+        lastCmdYaw = 0f;
+        lastCmdHeight = 0f;
+        lastPhotoPos = Vector3.zero;
 
         if (reverseOrder) {
             this.waypoints = new List<Vector3>(waypoints);
@@ -101,7 +109,7 @@ public class Navigator : MonoBehaviour {
             posTimer = 0f;
             lastDronePos = dronePos; //keep updating so timer starts fresh after grace
             lastDroneYaw = droneYaw;
-        } else if (Vector3.Distance(dronePos, lastDronePos) < 0.05f && Mathf.Abs(Mathf.DeltaAngle(droneYaw, lastDroneYaw)) < 2.0f && Mathf.Abs(lastCmdPitch) < 0.05f && Mathf.Abs(lastCmdRoll) < 0.05f) {
+        } else if (Vector3.Distance(dronePos, lastDronePos) < 0.05f && Mathf.Abs(Mathf.DeltaAngle(droneYaw, lastDroneYaw)) < 2.0f && Mathf.Abs(lastCmdPitch) < 0.05f && Mathf.Abs(lastCmdRoll) < 0.05f && Mathf.Abs(lastCmdYaw) < 0.5f && Mathf.Abs(lastCmdHeight) < 0.005f) {
             posTimer += Time.deltaTime;
             if (posTimer > timeTakeOver) {
                 Debug.LogWarning("Mission stopped! Takeover");
@@ -137,6 +145,8 @@ public class Navigator : MonoBehaviour {
                 } else {
                     // hover in place, only rotate
                     float cornerCmdYaw = Mathf.Clamp(cornerYawErr * 1.5f, -maxYawSpeed, maxYawSpeed);
+                    lastCmdYaw = cornerCmdYaw;
+                    lastCmdHeight = 0f;
                     SendControlCommand(0f, 0f, cornerCmdYaw, 0f, 0f);
                 }
             } else {
@@ -241,6 +251,8 @@ public class Navigator : MonoBehaviour {
 
         lastCmdPitch = cmdPitch;
         lastCmdRoll = cmdRoll;
+        lastCmdYaw = cmdYaw;
+        lastCmdHeight = cmdHeight;
         SendControlCommand(cmdPitch, cmdRoll, cmdYaw, cmdHeight, 0f);
     }
 
