@@ -1,5 +1,24 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Esri.GameEngine.Geometry;
+using Esri.ArcGISMapsSDK.Components;
+
+public class OSMRoot {
+    public List<OSMElement> elements;
+}
+
+public class OSMElement {
+    public string type;
+    public long id;
+    public List<OSMCoord> geometry;
+    public Dictionary<string, string> tags;
+}
+
+public class OSMCoord {
+    public double lat;
+    public double lon;
+}
 
 public static class OSMBuildingSelector {
     public static OSMElement FindClosestBuilding(OSMRoot root, double clickLat, double clickLon) {
@@ -32,5 +51,17 @@ public static class OSMBuildingSelector {
         }
 
         return best;
+    }
+}
+
+public static class OSMToUnity {
+    public static List<Vector3> ConvertPolygonToUnity(OSMElement building, ArcGISMapComponent map, double baseAltitude) {
+        var result = new List<Vector3>();
+        foreach (var p in building.geometry) {
+            //use base altitude for all points
+            var finalGeo = new ArcGISPoint(p.lon, p.lat, baseAltitude, ArcGISSpatialReference.WGS84());
+            result.Add(map.GeographicToEngine(finalGeo));
+        }
+        return result;
     }
 }
