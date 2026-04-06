@@ -26,9 +26,9 @@ public class HandleArrows : MonoBehaviour {
 
     void Start() {
         cam = Camera.main;
-        xArrow = createArrow(Vector3.right, Color.red);
-        yArrow = createArrow(Vector3.up, Color.green);
-        zArrow = createArrow(Vector3.forward, Color.blue);
+        xArrow = CreateArrow(Vector3.right, Color.red);
+        yArrow = CreateArrow(Vector3.up, Color.green);
+        zArrow = CreateArrow(Vector3.forward, Color.blue);
         xgrafic = xArrow.GetComponentsInChildren<Renderer>();
         ygrafic = yArrow.GetComponentsInChildren<Renderer>();
         zgrafic = zArrow.GetComponentsInChildren<Renderer>();
@@ -36,7 +36,6 @@ public class HandleArrows : MonoBehaviour {
 
     void Update() {
 
-        //decide which arrow we drag
         if (Input.GetMouseButtonDown(0)) {
             Ray r = cam.ScreenPointToRay(Input.mousePosition);
             RaycastHit hit;
@@ -61,13 +60,12 @@ public class HandleArrows : MonoBehaviour {
         }
     }
 
-    public GameObject createArrow(Vector3 looksAt, Color color) {
-        //plain game object for the arrows
+    public GameObject CreateArrow(Vector3 looksAt, Color color) {
         GameObject arrow = new GameObject("Arrow");
         arrow.transform.parent = transform;
         arrow.transform.localPosition = Vector3.zero;
 
-        //stick of the arrow
+        //body of the arrow
         GameObject stick = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         stick.transform.parent = arrow.transform;
         stick.transform.localPosition = looksAt * 0.5f;
@@ -79,12 +77,11 @@ public class HandleArrows : MonoBehaviour {
         Mesh mesh = new Mesh();
         mr.mesh = mesh;
 
-        //size and dimension of cone
         cone.transform.parent = arrow.transform;
         cone.transform.localPosition = looksAt * 1f;
         cone.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
 
-        //detail of the cone, segments
+        //details of the cone 
         int segments = 7;
         float angle = 0.0f;
         float angleAmout = 2 * Mathf.PI / segments;
@@ -92,14 +89,10 @@ public class HandleArrows : MonoBehaviour {
         Vector3 pos = Vector3.zero;
 
         //top of the cone
-        pos.x = 0.0f;
-        pos.y = 1f;
-        pos.z = 0.0f;
-        verts.Add(new Vector3(pos.x, pos.y, pos.z));
+        verts.Add(new Vector3(0, 1f, 0));
 
         //base of the cone
-        pos.y = 0.0f;
-        verts.Add(new Vector3(pos.x, pos.y, pos.z));
+        verts.Add(Vector3.zero);
 
         //verts of the cone
         for (int i = 0; i < segments; i++) {
@@ -154,10 +147,8 @@ public class HandleArrows : MonoBehaviour {
 
         //rotation of sticks
         if (looksAt == Vector3.right || looksAt == Vector3.left) {
-            //cone.transform.localRotation = Quaternion.Euler(0, 0, 90);
             stick.transform.localRotation = Quaternion.Euler(0, 0, 90);
         } else if (looksAt == Vector3.forward || looksAt == Vector3.back) {
-            //cone.transform.localRotation = Quaternion.Euler(90, 0, 0);
             stick.transform.localRotation = Quaternion.Euler(90, 0, 0);
         }
 
@@ -194,22 +185,20 @@ public class HandleArrows : MonoBehaviour {
         draggingArrow = type;
         startPos = transform.position;
 
-        //on what plane to drag on
-        Vector3 plane;
+        Vector3 dragplane;
         if (type == ArrowType.X) {
-            plane = Vector3.up;
+            dragplane = Vector3.up;
             SetHighlight(xgrafic, Color.red);
         } else if (type == ArrowType.Y) {
-            plane = Vector3.forward;
+            dragplane = Vector3.forward;
             SetHighlight(ygrafic, Color.green);
         } else {
-            plane = Vector3.up;
+            dragplane = Vector3.up;
             SetHighlight(zgrafic, Color.blue);
         }
 
-        this.plane = new Plane(plane, transform.position);
+        plane = new Plane(dragplane, transform.position);
 
-        //init drag in mission editor
         if (missioneditor != null) {
             missioneditor.InitDragArr(wp.GetComponent<WaypointSelect>());
         }

@@ -6,6 +6,7 @@ using System.IO;
 //using System.Windows.Input;
 using Esri.GameEngine.Geometry;
 using System.Linq;
+using System.Net;
 //using UnityEngine.TestTools.Constraints;
 
 public class MissionController : MonoBehaviour {
@@ -58,7 +59,6 @@ public class MissionController : MonoBehaviour {
     public void PrepareMission(GameObject building, List<Vector3> footprint) {
         Debug.Log("PREPARING MISSION...");
 
-        //generate path
         List<Vector3> rawHelixUnity = generator.GenerateScanPath(building, footprint);
 
         if (rawHelixUnity == null || rawHelixUnity.Count == 0) {
@@ -66,37 +66,36 @@ public class MissionController : MonoBehaviour {
             return;
         }
 
-        //converting to gps coords
-        //put in point structure
-        List<GPSWaypoint> gpsHelix = generator.ConvertToGPSCoordinates(rawHelixUnity, generator.helixNormals);
+        //convert to gps and sort
+        List<GameObject> wps = generator.GetMissionWaypoints();
+        wps.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
+        List<Vector3> norms = generator.GetNormalsOrdered(wps);
+        List<GPSWaypoint> gpsHelix = generator.ConvertToGPSCoordinates(rawHelixUnity, norms);
 
-        //put in complex structure
-        MissionData complexMission = new MissionData();
-        complexMission.route = new Route();
-        complexMission.route.name = "helix scan";
-        complexMission.route.segments = new List<Segment>();
+        MissionData complexMission = new MissionData {
+            route = new Route {
+                name = "mission_scan",
+                segments = new List<Segment>()
+            }
+        };
 
-        //one mission segment
-        Segment scanSegment = new Segment();
-        scanSegment.type = "scan"; //whatever type we want to use
-
-        //parameters
-        scanSegment.parameters = new Parameters();
-        scanSegment.parameters.maxHeight = paramMaxHeight;
-        scanSegment.parameters.minHeight = paramMinHeight;
-        scanSegment.parameters.overlapForward = paramOverlap;
-        scanSegment.parameters.overlapSide = paramOverlap;
-        scanSegment.parameters.scanDistance = generator.scanDistance;
-        scanSegment.parameters.scanPattern = "Helix";
-
-        //multipoint segment
-        scanSegment.multipoint = new MultiPoint();
-        scanSegment.multipoint.points = new List<Point>();
+        Segment scanSegment = new Segment() {
+            type = "scan",
+            parameters = new Parameters {
+                maxHeight = paramMaxHeight,
+                minHeight = paramMinHeight,
+                overlapForward = paramOverlap,
+                overlapSide = paramOverlap,
+                scanDistance = generator.scanDistance,
+                scanPattern = "universal"
+            }, multipoint = new MultiPoint {
+                points = new List<Point>()
+            }
+        };
 
         //add start to path
         AddPointToSegment(scanSegment, startLat, startLon, startAlt);
 
-        //then we add the generated points
         foreach (var wp in gpsHelix) {
             AddPointToSegment(scanSegment, wp.latitude, wp.longitude, wp.altitude, wp.speed, wp.heading, wp.gimbal_pitch, wp.gimbal_yaw);
         }
@@ -104,18 +103,14 @@ public class MissionController : MonoBehaviour {
         //add end to path
         AddPointToSegment(scanSegment, startLat, startLon, startAlt);
 
-        //finalize mission structure
         complexMission.route.segments.Add(scanSegment);
-
-        //sending over network
-        //SendMissionToNetwork(complexMission);
         currentMission = complexMission;
     }
 
     private void UpdateMissionFromWaypoints() {
         List<GameObject> allwps = generator.GetMissionWaypoints();
+        allwps.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
 
-        //list of positions
         List<Vector3> updatedPath = new List<Vector3>();
         foreach (GameObject wp in allwps) {
             updatedPath.Add(wp.transform.position);
@@ -123,11 +118,9 @@ public class MissionController : MonoBehaviour {
 
         //update current mission for sticks
         currentMissionSticks = updatedPath;
-
-        //gps conversion
         List<GPSWaypoint> updatedGPS = generator.ConvertToGPSCoordinates(updatedPath, null);
 
-        //back to currmission
+        //add base points to curr mission
         currentMission.route.segments[0].multipoint.points.Clear();
 
         AddPointToSegment(currentMission.route.segments[0], startLat, startLon, startAlt);
@@ -183,17 +176,22 @@ public class MissionController : MonoBehaviour {
                     continue;
                 Vector3 edgeDir = edge / edgeLen;
 
-                float dot = Vector3.Dot(pos - A, edgeDir);
+                /*
                 float t = Mathf.Clamp01(dot / edgeLen);
                 Vector3 projection = A + edgeDir * (t * edgeLen);
+                */
+                float dot = Vector3.Dot(pos - A, edgeDir);
+                float t = Mathf.Clamp(dot, 0f, edgeLen);
+                Vector3 projection = A + edgeDir * t;
 
                 float dist = Vector3.Distance(pos, projection);
                 if (dist < minDist) {
                     minDist = dist;
                     bestProjection = projection;
-                    // kolmice na hranu v XZ rovine
+
+
                     Vector3 normal = new Vector3(edgeDir.z, 0, -edgeDir.x);
-                    // orientuj ven od stredu
+                    //out of the center
                     if (Vector3.Dot(bestProjection - footprintCenter, normal) < 0)
                         normal = -normal;
                     bestNormal = normal;
@@ -303,8 +301,11 @@ public class MissionController : MonoBehaviour {
             if (settings.isWaypointMission) {
                 SendMissionToNetwork(currentMission);
             } else {
-                List<Vector3> normals = generator.GetMissionNormals(currentMissionSticks, generator.GetMissionCenter(currentMissionSticks));
-                navigator.StartMission("", currentMissionSticks, normals, generator.photoInterval);
+                List<GameObject> all = generator.GetMissionWaypoints();
+                all.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
+                currentMissionSticks = all.Select(wp => wp.transform.position).ToList();
+                List<Vector3> norms = generator.GetNormalsOrdered(all);
+                navigator.StartMission("", currentMissionSticks, norms, generator.photoInterval);
             }
         } else {
             Debug.LogError("No mission ready to start. Try selecting a building first.");
@@ -317,8 +318,10 @@ public class MissionController : MonoBehaviour {
         if (!settings.isWaypointMission) {
             navigator.StopDrone();
         } else {
-            string stop = "{\"type\":\"stop_mission\",\"data\":{}}";
-            WebSocketServer.Instance.BroadcastToAll(stop);
+            WebSocketServer.Instance.BroadcastToAll(JsonConvert.SerializeObject(new {
+                type = "stop_mission", data = new {
+                }
+            }));
             Toast.call.Show("Mission stop requested!", 2f, true);
         }
     }
@@ -327,12 +330,13 @@ public class MissionController : MonoBehaviour {
         if (currentMission == null)
             return null;
 
-        //update mission
         UpdateMissionFromWaypoints();
         currentMission.route.name = name;
 
         //prepare model to save
         Collider col = currBuilding.GetComponent<Collider>();
+        if (col == null)
+            return null;
         BuildingInfo info = new BuildingInfo();
         info.name = name;
 
@@ -343,7 +347,6 @@ public class MissionController : MonoBehaviour {
         info.minY = (float) down.Z;
         info.maxY = (float) top.Z;
 
-        //save footprint as gps, ghost can be created
         info.footprint = new List<GpsCorner>();
         foreach (Vector3 p in currFootprint) {
             ArcGISPoint geo = generator.mapComponent.EngineToGeographic(p);
@@ -353,12 +356,10 @@ public class MissionController : MonoBehaviour {
             info.footprint.Add(corner);
         }
 
-        //create save struct
         MissionSave save = new MissionSave();
         save.mission = currentMission;
         save.building = info;
 
-        //serialize and proceed to save
         string json = JsonConvert.SerializeObject(save);
         string folder = Path.Combine(Application.persistentDataPath, "Missions");
         Directory.CreateDirectory(folder);
@@ -408,6 +409,8 @@ public class MissionController : MonoBehaviour {
                 footprint.Add(generator.mapComponent.GeographicToEngine(geo));
             }
         }
+        if (footprint.Count == 0)
+            return false;
 
         double lat = loaded.building.footprint[0].lat;
         double lon = loaded.building.footprint[0].lon;
@@ -518,6 +521,7 @@ public class MissionController : MonoBehaviour {
             snakeMode = true;
         }
 
+        /*
         List<int> idx = new List<int>();
         for (int i = 0; i < ordered.Count; i++) {
             if (deleting.Contains(ordered[i]))
@@ -525,7 +529,7 @@ public class MissionController : MonoBehaviour {
         }
         generator.RemoveNormalsIdx(idx);
 
-        /*
+        
         //refresh normals
         if (generator.helixNormals != null) {
             List<int> deleteIndices = ordered
@@ -574,15 +578,12 @@ public class MissionController : MonoBehaviour {
     }
 
     private void ClipFootprint() {
-        //get remaining waypoints sorted by WP index
         List<GameObject> remaining = generator.GetMissionWaypoints();
         if (remaining == null || remaining.Count < 2)
             return;
-
-        //sort wps by index
         remaining.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
 
-        //calculate center of remaining wps for clip
+        //calculate center of remaining wps for clipping
         Vector3 remainingCenter = Vector3.zero;
         foreach (var wp in remaining)
             remainingCenter += new Vector3(wp.transform.position.x, 0, wp.transform.position.z);
@@ -658,12 +659,28 @@ public class MissionController : MonoBehaviour {
         return missions;
     }
 
+    public List<GameObject> GetMissionWaypoints() {
+        return generator.GetMissionWaypoints();
+    }
+
+    public void ClearPath() {
+        generator.ClearPath();
+    }
+
     public GameObject GetCurrentBuilding() {
         return currBuilding;
     }
 
     public Vector3 GetNormal(int idx) {
         return generator.GetNormal(idx);
+    }
+
+    public float GetWidthCoverage() {
+        return generator.CalculateWidthCoverage();
+    }
+
+    public float GetHeightCoverage() {
+        return generator.CalculateHeightCoverage();
     }
 
     public void SetScanDistance(float value) {
@@ -712,6 +729,38 @@ public class MissionController : MonoBehaviour {
         Regenerate();
     }
 
+    public float GetScanDistance() {
+        return generator.scanDistance;
+    }
+
+    public float GetVerticalStep() {
+        return generator.verticalStep;
+    }
+
+    public bool GetUse3DTubes() {
+        return generator.use3DTubes;
+    }
+
+    public float GetSegmentLen() {
+        return generator.maxSegmentLen;
+    }
+
+    public float GetWaypointSize() {
+        return generator.waypointSize;
+    }
+
+    public float GetFlightSpeed() {
+        return generator.flightSpeed;
+    }
+
+    public float GetWidthOverlap() {
+        return generator.widthOverlap;
+    }
+
+    public float GetHeightOverlap() {
+        return generator.heightOverlap;
+    }
+
     public void SetBuilding(GameObject building, List<Vector3> footprint) {
         currBuilding = building;
         currFootprint = new List<Vector3>(footprint);
@@ -746,4 +795,6 @@ public class MissionController : MonoBehaviour {
             return false;
         }
     }
+
+
 }

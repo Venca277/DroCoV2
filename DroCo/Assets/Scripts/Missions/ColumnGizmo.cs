@@ -209,7 +209,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             HandleArrows arrowsInst = FindObjectOfType<HandleArrows>();
             if (arrowsInst != null) {
                 //create only up arrow
-                yArrow = arrowsInst.createArrow(Vector3.up, Color.green);
+                yArrow = arrowsInst.CreateArrow(Vector3.up, Color.green);
 
                 //create xz drag
                 xzDisk = createRing(1.5f, 0.15f, 48);

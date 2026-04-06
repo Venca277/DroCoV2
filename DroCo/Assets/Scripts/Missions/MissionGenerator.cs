@@ -73,11 +73,13 @@ public class MissionGenerator : MonoBehaviour {
     private int layerMission;
     private int layerBuildings;
     private LineRenderer lineRenderer;
-    public List<GameObject> spawnedObjects = new List<GameObject>();
-    public Dictionary<GameObject, List<GameObject>> tubeMap = new Dictionary<GameObject, List<GameObject>>();
-    public Dictionary<GameObject, int> waypointLevel = new Dictionary<GameObject, int>();
-    public List<Vector3> helixNormals = new List<Vector3>();
+    //public List<GameObject> spawnedObjects = new List<GameObject>();
+    //public Dictionary<GameObject, List<GameObject>> tubeMap = new Dictionary<GameObject, List<GameObject>>();
+    //public Dictionary<GameObject, int> waypointLevel = new Dictionary<GameObject, int>();
+    private List<Vector3> helixNormals = new List<Vector3>();
     public Vector3 lastcentroid = Vector3.zero;
+
+    public Dictionary<GameObject, WaypointData> waypoints = new Dictionary<GameObject, WaypointData>();
 
     void Awake() {
         layerMission = LayerMask.NameToLayer("Mission");
@@ -154,6 +156,37 @@ public class MissionGenerator : MonoBehaviour {
         List<Vector3> orbitRing = new List<Vector3>();
         List<Vector3> orbitNormal = new List<Vector3>();
 
+        float minEdgeLen = Mathf.Max(photoInterval * 0.5f, 0.15f);
+        List<Vector3> cleanFootprint = new List<Vector3>();
+        for (int i = 0; i < footprint.Count; i++) {
+            Vector3 p = footprint[i];
+            p.y = 0;
+            if (cleanFootprint.Count == 0) {
+                cleanFootprint.Add(p);
+            } else {
+                if (Vector3.Distance(p, cleanFootprint[cleanFootprint.Count - 1]) >= minEdgeLen)
+                    cleanFootprint.Add(p);
+            }
+        }
+        if (cleanFootprint.Count > 1 &&
+            Vector3.Distance(cleanFootprint[cleanFootprint.Count - 1], cleanFootprint[0]) < minEdgeLen)
+            cleanFootprint.RemoveAt(cleanFootprint.Count - 1);
+
+        if (cleanFootprint.Count < 3)
+            return (orbitRing, orbitNormal);
+
+        footprint = cleanFootprint;
+
+        float signedAreaPre = 0f;
+        for (int fi = 0; fi < footprint.Count; fi++) {
+            Vector3 fa = footprint[fi];
+            fa.y = 0;
+            Vector3 fb = footprint[(fi + 1) % footprint.Count];
+            fb.y = 0;
+            signedAreaPre += (fa.x * fb.z) - (fb.x * fa.z);
+        }
+        bool clockW = (signedAreaPre > 0f);
+
         //recopy the footprint with point of max seglen apart
         List<Vector3> sepFootprint = new List<Vector3>();
         for (int i = 0; i < footprint.Count; i++) {
@@ -176,19 +209,45 @@ public class MissionGenerator : MonoBehaviour {
             //if any point is farther interpolate between
             if (dist > maxSeg) {
                 int steps = Mathf.CeilToInt(dist / maxSeg);
+
+                Vector3 p0 = footprint[(i - 1 + footprint.Count) % footprint.Count];
+                p0.y = 0;
+                Vector3 p3 = footprint[(i + 2) % footprint.Count];
+                p3.y = 0;
+
+                Vector3 dirA = (p2 - p1).normalized;                 // current edge
+                Vector3 dirPre = (p1 - p0).normalized;               // edge arriving at p1
+                Vector3 dirPost = (p3 - p2).normalized;              // edge leaving p2
+
+                float crossAtP1 = dirPre.x * dirA.z - dirPre.z * dirA.x;
+                float crossAtP2 = dirA.x * dirPost.z - dirA.z * dirPost.x;
+
+                bool p1IsConcave = clockW ? (crossAtP1 < 0f) : (crossAtP1 > 0f);
+                bool p2IsConcave = clockW ? (crossAtP2 < 0f) : (crossAtP2 > 0f);
+
                 for (int j = 1; j < steps; j++) {
-                    sepFootprint.Add(Vector3.Lerp(p1, p2, (float) j / steps));
+                    Vector3 vert = Vector3.Lerp(p1, p2, (float) j / steps);
+
+                    if (p1IsConcave && Vector3.Distance(vert, p1) < scanDistance)
+                        continue;
+                    if (p2IsConcave && Vector3.Distance(vert, p2) < scanDistance)
+                        continue;
+
+                    sepFootprint.Add(vert);
                 }
             }
         }
 
+        /*
         float signedArea = 0f;
         for (int i = 0; i < sepFootprint.Count; i++) {
             Vector3 a = sepFootprint[i];
             Vector3 b = sepFootprint[(i + 1) % sepFootprint.Count];
             signedArea += (a.x * b.z) - (b.x * a.z);
         }
+
         bool isCCW = (signedArea > 0f);
+        */
 
         for (int i = 0; i < sepFootprint.Count; i++) {
             Vector3 curr = sepFootprint[i];
@@ -199,9 +258,10 @@ public class MissionGenerator : MonoBehaviour {
             Vector3 dirPrev = (curr - prev).normalized;
             Vector3 dirNext = (next - curr).normalized;
 
-            Vector3 normPrev = isCCW ? new Vector3(dirPrev.z, 0, -dirPrev.x) : new Vector3(-dirPrev.z, 0, dirPrev.x);
-            Vector3 normNext = isCCW ? new Vector3(dirNext.z, 0, -dirNext.x) : new Vector3(-dirNext.z, 0, dirNext.x);
+            Vector3 normPrev = clockW ? new Vector3(dirPrev.z, 0, -dirPrev.x) : new Vector3(-dirPrev.z, 0, dirPrev.x);
+            Vector3 normNext = clockW ? new Vector3(dirNext.z, 0, -dirNext.x) : new Vector3(-dirNext.z, 0, dirNext.x);
 
+            /*
             //average normal for the vertex
             Vector3 vertexNormal = (normPrev + normNext).normalized;
             if (vertexNormal == Vector3.zero)
@@ -209,10 +269,25 @@ public class MissionGenerator : MonoBehaviour {
 
             //move the offset of scandist
             Vector3 offsetPoint = curr + (vertexNormal * scanDistance);
+            */
+
+            Vector3 miterSum = normPrev + normNext;
+            float miterMag = miterSum.magnitude;
+            Vector3 offsetPoint;
+            if (miterMag < 0.001f) {
+                //to concave corner
+                offsetPoint = curr + normPrev * scanDistance;
+            } else {
+                float miterDist = (2.0f * scanDistance) / miterMag;
+                miterDist = Mathf.Min(miterDist, scanDistance * 2.0f); //convex limit for sharp corners
+                offsetPoint = curr + miterSum.normalized * miterDist;
+            }
 
             float minOrbitSpacing = (missionType == MissionType.Vertical) ? photoInterval * 0.8f : 0.1f;
             if (orbitRing.Count == 0 || Vector3.Distance(offsetPoint, orbitRing[orbitRing.Count - 1]) > minOrbitSpacing) {
                 orbitRing.Add(offsetPoint);
+
+                //orbitNormal.Add(vertexNormal);
                 orbitNormal.Add(normNext);
             }
         }
@@ -275,7 +350,7 @@ public class MissionGenerator : MonoBehaviour {
             levelIndex++;
         }
 
-        VisualizePath(finalPath, finalPathLevels);
+        VisualizePath(finalPath, helixNormals, finalPathLevels);
         return finalPath;
     }
 
@@ -348,7 +423,7 @@ public class MissionGenerator : MonoBehaviour {
             goingUp = !goingUp; // alternate direction for next column
         }
 
-        VisualizePath(finalPath);
+        VisualizePath(finalPath, helixNormals);
         return finalPath;
     }
 
@@ -463,21 +538,19 @@ public class MissionGenerator : MonoBehaviour {
         if (remaining == null || remaining.Count == 0)
             return;
 
-        //sort all waypoints
+        //sort wps to connect in snake
         remaining.Sort((a, b) => GetWaypointIdx(a).CompareTo(GetWaypointIdx(b)));
 
         //sort by orbit level
         Dictionary<int, List<GameObject>> sLvl = new Dictionary<int, List<GameObject>>();
         foreach (GameObject wp in remaining) {
             int lvl = 0;
-            if (waypointLevel.ContainsKey(wp))
-                lvl = waypointLevel[wp];
+            if (waypoints.ContainsKey(wp))
+                lvl = waypoints[wp].level;
             if (!sLvl.ContainsKey(lvl))
                 sLvl[lvl] = new List<GameObject>();
             sLvl[lvl].Add(wp);
         }
-
-        //sort ascending lvls
         List<int> lvls = new List<int>(sLvl.Keys);
         lvls.Sort();
 
@@ -502,7 +575,6 @@ public class MissionGenerator : MonoBehaviour {
                 }
             }
 
-            //trough first level to the end
             //swapping the direction of every level
             for (int i = 0; i < lvlWPs.Count; i++) {
                 int idx = 0;
@@ -515,15 +587,13 @@ public class MissionGenerator : MonoBehaviour {
 
             lastPos = neworder[neworder.Count - 1].transform.position;
             firstLvl = false;
-            swap = !swap;   //next swap
+            swap = !swap;
         }
 
         //rename waypoints to fit new order
         for (int i = 0; i < neworder.Count; i++) {
             neworder[i].name = $"WP_{i}";
         }
-
-        //destroy all old tubes from remaining WPs
         RemoveTubes(neworder);
 
         //create new tubes between consecutive pairs in neworder
@@ -563,9 +633,9 @@ public class MissionGenerator : MonoBehaviour {
                     heading += 360;
                 wp.heading = heading;
             } else if (lastcentroid != Vector3.zero) {
-                float vectx = unityPath[i].x - lastcentroid.x;
-                float vectz = unityPath[i].z - lastcentroid.z;
-                Vector3 dir = new Vector3(vectx, 0, vectz).normalized;
+                Vector3 dir = (unityPath[i] - lastcentroid);
+                dir.y = 0;
+                dir.Normalize();
                 float heading = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
                 if (heading < 0)
                     heading += 360;
@@ -578,7 +648,7 @@ public class MissionGenerator : MonoBehaviour {
         return gpsPath;
     }
 
-    public void VisualizePath(List<Vector3> path, List<int> levelData = null) {
+    public void VisualizePath(List<Vector3> path, List<Vector3> normals = null, List<int> levelData = null) {
         if (path.Count == 0)
             return;
 
@@ -608,14 +678,28 @@ public class MissionGenerator : MonoBehaviour {
             GameObject currP = CreateWaypoint(currentPos, i, path.Count, currlvl);
             if (currP == null)
                 return;
-            tubeMap[currP] = new List<GameObject>();
+
+            //tubeMap[currP] = new List<GameObject>();
+            WaypointData data = new WaypointData();
+            data.level = currlvl;
+            if (normals != null && i < normals.Count)
+                data.normal = normals[i];
+            else {
+                Vector3 fall = currentPos - lastcentroid;
+                fall.y = 0;
+                if (fall.sqrMagnitude > 0.001f)
+                    data.normal = fall.normalized;
+                else
+                    data.normal = Vector3.forward;
+            }
+            waypoints[currP] = data;
 
             if (use3DTubes && i > 0) {
-                //tubes bewteen
+                //tubes between
                 GameObject tube = CreateTube(path[i - 1], currentPos, i - 1);
 
-                tubeMap[currP].Add(tube);
-                tubeMap[prevP].Add(tube);
+                waypoints[currP].tubes.Add(tube);
+                waypoints[prevP].tubes.Add(tube);
             }
             prevP = currP;
         }
@@ -638,7 +722,7 @@ public class MissionGenerator : MonoBehaviour {
         wpObj.transform.localScale = Vector3.one * waypointSize;
         int layerIndex = LayerMask.NameToLayer("Mission");
         wpObj.layer = (layerIndex != -1) ? layerIndex : 0;
-        spawnedObjects.Add(wpObj);
+        //spawnedObjects.Add(wpObj);
 
         if (pathCount <= 0)
             return wpObj;
@@ -660,12 +744,11 @@ public class MissionGenerator : MonoBehaviour {
             wpObj.transform.localScale = Vector3.one * waypointSize * 1.5f;
         }
 
-        waypointLevel[wpObj] = level;
+        //waypointLevel[wpObj] = level;
         return wpObj;
     }
 
     private GameObject CreateTube(Vector3 start, Vector3 end, int index) {
-        //creates cylinder
         GameObject tube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         tube.name = "Tube_Segment_" + index;
         Collider col = tube.GetComponent<Collider>();
@@ -677,10 +760,8 @@ public class MissionGenerator : MonoBehaviour {
             Debug.LogWarning("no collider!");
         }
 
-        //set layer so it renders infornt of buildings
         tube.layer = layerMission;
 
-        //create new renderer for color a material
         MeshRenderer renderer = tube.GetComponent<MeshRenderer>();
         renderer.material = new Material(tubeMaterial);
 
@@ -691,7 +772,6 @@ public class MissionGenerator : MonoBehaviour {
         tube.transform.LookAt(end);
         tube.transform.Rotate(90, 0, 0);
         tube.transform.localScale = new Vector3(tubeThickness, distance / 2f, tubeThickness);
-        spawnedObjects.Add(tube);
 
         return tube;
     }
@@ -699,23 +779,23 @@ public class MissionGenerator : MonoBehaviour {
     public void AddTube(GameObject wp1, GameObject wp2) {
         //creates tube between two wps, adds to map
         GameObject tube = CreateTube(wp1.transform.position, wp2.transform.position, -1);
-        if (!tubeMap.ContainsKey(wp1))
-            tubeMap[wp1] = new List<GameObject>();
-        tubeMap[wp1].Add(tube);
+        if (!waypoints.ContainsKey(wp1))
+            waypoints[wp1] = new WaypointData();
+        waypoints[wp1].tubes.Add(tube);
 
-        if (!tubeMap.ContainsKey(wp2))
-            tubeMap[wp2] = new List<GameObject>();
-        tubeMap[wp2].Add(tube);
+        if (!waypoints.ContainsKey(wp2))
+            waypoints[wp2] = new WaypointData();
+        waypoints[wp2].tubes.Add(tube);
     }
 
     public void AddTube(GameObject wp1, GameObject wp2, Vector3 from, Vector3 to) {
         GameObject tube = CreateTube(from, to, -1);
-        if (!tubeMap.ContainsKey(wp1))
-            tubeMap[wp1] = new List<GameObject>();
-        tubeMap[wp1].Add(tube);
-        if (!tubeMap.ContainsKey(wp2))
-            tubeMap[wp2] = new List<GameObject>();
-        tubeMap[wp2].Add(tube);
+        if (!waypoints.ContainsKey(wp1))
+            waypoints[wp1] = new WaypointData();
+        waypoints[wp1].tubes.Add(tube);
+        if (!waypoints.ContainsKey(wp2))
+            waypoints[wp2] = new WaypointData();
+        waypoints[wp2].tubes.Add(tube);
     }
 
     public void UpdateLineRenderer(List<Vector3> positions) {
@@ -753,38 +833,42 @@ public class MissionGenerator : MonoBehaviour {
 
     public void ClearPath() {
         //clearing all mission variables/objects
-        lineRenderer.positionCount = 0;
-        foreach (var obj in spawnedObjects) {
-            if (obj != null)
-                Destroy(obj);
+        HashSet<GameObject> all = new HashSet<GameObject>();
+        foreach (var wp in waypoints) {
+            if (wp.Key != null)
+                all.Add(wp.Key);
+
+            if (wp.Value.tubes != null)
+                foreach (var tube in wp.Value.tubes)
+                    if (tube != null)
+                        all.Add(tube);
         }
-        spawnedObjects.Clear();
-        waypointLevel.Clear();
-        tubeMap.Clear();
+        foreach (var obj in all)
+            Destroy(obj);
+        waypoints.Clear();
     }
 
     public void RemoveTubes(List<GameObject> waypoints, List<GameObject> rem = null) {
-        var tubs = new HashSet<GameObject>();
+        HashSet<GameObject> tubs = new HashSet<GameObject>();
 
         foreach (GameObject wp in waypoints) {
-            if (wp == null || !tubeMap.ContainsKey(wp))
+            if (!this.waypoints.ContainsKey(wp))
                 continue;
-            foreach (GameObject tube in tubeMap[wp]) {
+            foreach (GameObject tube in this.waypoints[wp].tubes) {
                 if (tube != null)
                     tubs.Add(tube);
             }
-            tubeMap.Remove(wp);
+            this.waypoints[wp].tubes.Clear();
         }
 
         if (rem != null) {
             foreach (GameObject wp in rem) {
-                if (tubeMap.ContainsKey(wp))
-                    tubeMap[wp].RemoveAll(tubs.Contains);
+                if (this.waypoints.ContainsKey(wp))
+                    this.waypoints[wp].tubes.RemoveAll(tubs.Contains);
             }
         }
 
         foreach (GameObject tube in tubs) {
-            spawnedObjects.Remove(tube);
             Destroy(tube);
         }
     }
@@ -794,28 +878,18 @@ public class MissionGenerator : MonoBehaviour {
             if (wp == null)
                 continue;
 
-            tubeMap.Remove(wp);
-            spawnedObjects.Remove(wp);
+            this.waypoints.Remove(wp);
             Destroy(wp);
         }
     }
 
-    public void RemoveNormalsIdx(List<int> indexes) {
-        if (helixNormals == null)
-            return;
-        foreach (int index in indexes.OrderByDescending(i => i)) {
-            if (index < helixNormals.Count)
-                helixNormals.RemoveAt(index);
-        }
-    }
-
     public bool HasMission() {
-        return spawnedObjects.Count > 0;
+        return waypoints.Count > 0;
     }
 
     public List<GameObject> GetMissionWaypoints() {
         List<GameObject> waypoints = new List<GameObject>();
-        foreach (GameObject wp in tubeMap.Keys) {
+        foreach (GameObject wp in this.waypoints.Keys) {
             waypoints.Add(wp);
         }
         return waypoints;
@@ -835,26 +909,45 @@ public class MissionGenerator : MonoBehaviour {
     }
 
     public List<GameObject> GetWaypointTubes(GameObject wp) {
-        if (tubeMap.ContainsKey(wp))
-            return tubeMap[wp];
+        if (waypoints.ContainsKey(wp))
+            return waypoints[wp].tubes;
         return new List<GameObject>();
     }
 
     public int GetWaypointLevel(GameObject wp) {
-        if (waypointLevel.ContainsKey(wp))
-            return waypointLevel[wp];
+        if (waypoints.ContainsKey(wp))
+            return waypoints[wp].level;
         return 0;
     }
 
     public Vector3 GetNormal(int idx) {
-        if (helixNormals != null && idx >= 0 && idx < helixNormals.Count)
-            return helixNormals[idx];
+        foreach (var wp in waypoints)
+            if (GetWaypointIdx(wp.Key) == idx)
+                return wp.Value.normal;
         return Vector3.zero;
     }
 
     public static int GetWaypointIdx(GameObject wp) {
         int.TryParse(wp.name.Replace("WP_", ""), out int idx);
         return idx;
+    }
+
+    public List<Vector3> GetNormalsOrdered(List<GameObject> ordered) {
+        List<Vector3> norms = new List<Vector3>(ordered.Count);
+        foreach (GameObject wp in ordered) {
+            if (waypoints.ContainsKey(wp)) {
+                norms.Add(waypoints[wp].normal);
+            } else if (wp != null) {
+                Vector3 fall = wp.transform.position - lastcentroid;
+                fall.y = 0f;
+                if (fall.sqrMagnitude > 0.001f)
+                    norms.Add(fall.normalized);
+                else
+                    norms.Add(Vector3.forward);
+            } else
+                norms.Add(Vector3.forward);
+        }
+        return norms;
     }
 
     public List<Vector3> GetMissionNormals(List<Vector3> points, Vector3 center) {

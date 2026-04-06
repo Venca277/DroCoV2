@@ -18,7 +18,6 @@ public class Navigator : MonoBehaviour {
     public float maxAscentSpeed = 0.1f; //up and down
     public string droneID = "";
 
-
     //logging for flight analysis
     private DroneManager droneManager;
     private float logFileTimer = 0f;
@@ -76,6 +75,7 @@ public class Navigator : MonoBehaviour {
         lastDronePos = droneManager != null ? GetDroneCurrentPosition() : Vector3.zero;
         lastDroneYaw = droneManager != null ? GetDroneCurrentYaw() : 0f;
         center = centerPoint(waypoints);
+        MissionUI.Instance?.ShineWp(0, Color.yellow);
         Debug.Log("WP count: " + this.waypoints.Count + " | Normal count: " + (this.waypointNormals != null ? this.waypointNormals.Count.ToString() : "null"));
     }
 
@@ -184,7 +184,9 @@ public class Navigator : MonoBehaviour {
 
         if (!rotating && Vector3.Distance(dronePos, lastPhotoPos) >= photoDistance) {
 
-            WebSocketServer.Instance?.BroadcastToAll("{\"type\":\"take_photo\"}");
+            WebSocketServer.Instance?.BroadcastToAll(JsonConvert.SerializeObject(new {
+                type = "take_photo"
+            }));
             string frame = droneManager?.GetCameraFrame(droneID);
             if (!string.IsNullOrEmpty(frame)) {
                 byte[] jpg = System.Convert.FromBase64String(frame);
@@ -204,6 +206,7 @@ public class Navigator : MonoBehaviour {
             lastDronePos = dronePos;
             lastDroneYaw = droneYaw;
             waypointTimer = waypointTime; //ignore takeover
+            MissionUI.Instance?.ShineWp(currentWaypointIndex + 1, Color.yellow);
             return;
         }
 

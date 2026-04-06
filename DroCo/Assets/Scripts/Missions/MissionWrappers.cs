@@ -40,3 +40,9 @@ public class ControlCommandData {
     public float throttle;
     public float gimbal_pitch;
 }
+
+public class WaypointData {
+    public List<GameObject> tubes = new List<GameObject>();
+    public int level = 0;
+    public Vector3 normal;
+}
