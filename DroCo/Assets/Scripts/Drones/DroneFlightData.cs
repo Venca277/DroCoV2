@@ -67,16 +67,6 @@ public class DroneFlightData {
     public override string ToString() {
         return $"{{client_id:{client_id}, altitude:{altitude}, gps:{gps}, aircraft_orientation:{aircraft_orientation}, gimbal_orientation:{gimbal_orientation}, timestamp:{timestamp}}}";
     }
-
-    //public void SetData(double height, double latitude, double longitute, double pitch, double roll, double yaw, double compass) {
-    //    Altitude = height;
-    //    Latitude = latitude;
-    //    Longitude = longitute;
-    //    Pitch = pitch;
-    //    Roll = roll;
-    //    Yaw = yaw;
-    //    Compass = compass;
-    //}
 }
 
 [Serializable]

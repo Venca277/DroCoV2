@@ -11,7 +11,7 @@ scopes = {
 	"last_search.2138236A" = "dronestati"
 	"OpenInspectorPreview.2138236A" = "0"
 	"currentGroup.2138236A" = "asset"
-	"last_search.FD7A1EDD" = "ref=\"/BuildingSystem\""
+	"last_search.FD7A1EDD" = "ref=\"Assets/Scripts/Missions/HandleArrows.cs\""
 	"OpenInspectorPreview.FD7A1EDD" = "0"
 	"currentGroup.FD7A1EDD" = "all"
 }

@@ -202,7 +202,7 @@ public class BuildingFetcher : MonoBehaviour {
                 CreateBuildingMesh(unityRel, building, false);
             }
             Toast.call.Show("Building models loaded", 2f, false);
-        }, settings.getRange()));
+        }, settings.GetRange()));
     }
 
     private float GetAltitudeFromCast(Vector3 center) {
