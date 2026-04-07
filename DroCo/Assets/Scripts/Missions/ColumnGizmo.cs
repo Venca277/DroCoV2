@@ -25,16 +25,26 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
 
     private ArrowType? draggingArrow;
     private Vector3 startPos;
-    private MissionEditor missioneditor;
+    public MissionEditor missioneditor;
     private Plane plane;
     public Transform wp;
-    private List<WaypointSelect> Waypointscol = new List<WaypointSelect>();
+    private List<WaypointSelect> waypointsCol = new List<WaypointSelect>();
     public bool dragging => draggingArrow != null;
     private bool created = false;
+    private int missionLayer;
+    private LayerMask missionMask;
+    private LayerMask gndMask;
+    private LayerMask missionGndMask;
+    private Shader shader;
+    private HandleArrows handleArrows;
 
     void Start() {
         cam = Camera.main;
-        missioneditor = FindObjectOfType<MissionEditor>();
+        missionLayer = LayerMask.NameToLayer("Mission");
+        missionMask = LayerMask.GetMask("Mission");
+        gndMask = LayerMask.GetMask("Default");
+        missionGndMask = LayerMask.GetMask("Mission", "Default");
+        shader = Shader.Find("Universal Render Pipeline/Lit");
     }
 
     void Update() {
@@ -47,7 +57,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
 
             Ray r = cam.ScreenPointToRay(Input.mousePosition);
             RaycastHit hit;
-            if (Physics.Raycast(r, out hit, 1000f, LayerMask.GetMask("Mission"))) {
+            if (Physics.Raycast(r, out hit, 1000f, missionMask)) {
                 Transform trans = hit.transform;
                 while (trans != null) {
                     if (trans.gameObject == yArrow) {
@@ -68,21 +78,20 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
 
         if (Input.GetMouseButtonUp(0)) {
             if (draggingArrow == ArrowType.XZ_PLANE) {
-                hideCol(); //hide col after dragging
+                ShowCol(false); //hide col after dragging
                 ResetHighlight(diskGraphic);
             }
             draggingArrow = null;
         }
     }
 
-    private GameObject createRing(float radius, float thickness, int segments = 32) {
+    private GameObject CreateRing(float radius, float thickness, int segments = 32) {
         GameObject ringCont = new GameObject("XZ_Ring");
-        ringCont.layer = LayerMask.NameToLayer("Mission");
+        ringCont.layer = missionLayer;
 
-        //ring texture
         GameObject ringVis = new GameObject("RingVis");
         ringVis.transform.SetParent(ringCont.transform, false);
-        ringVis.layer = LayerMask.NameToLayer("Mission");
+        ringVis.layer = missionLayer;
 
         MeshFilter meshF = ringVis.AddComponent<MeshFilter>();
         MeshRenderer meshR = ringVis.AddComponent<MeshRenderer>();
@@ -127,14 +136,12 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
 
         meshF.mesh = ringMesh;
 
-        //set color and material
-        Material ringMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        Material ringMaterial = new Material(shader);
         ringMaterial.color = new Color(0f, 1f, 1f, 1f);
-        ringMaterial.SetInt("_Cull", 0); //both side to render
+        ringMaterial.SetInt("_Cull", 0);
 
         meshR.material = ringMaterial;
 
-        //collider for clicking
         BoxCollider clickCollider = ringCont.AddComponent<BoxCollider>();
         clickCollider.center = Vector3.zero;
         clickCollider.size = new Vector3(outRad * 2f, 0.2f, outRad * 2f);
@@ -142,41 +149,49 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         return ringCont;
     }
 
-    public void createCol(WaypointSelect clickedWp) {
+    public void CreateCol(WaypointSelect clickedWp) {
         DestroyCol();
-
         wp = clickedWp.transform;
+
         colUp = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         colDown = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         colUp.name = "ColUp";
         colDown.name = "ColDown";
-        Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+
+        Material mat = new Material(shader);
         mat.color = new Color(1f, 0.5f, 0f);
         colUp.GetComponent<Renderer>().material = mat;
         colDown.GetComponent<Renderer>().material = mat;
+
+        //remove colliders cols will never be clicable
         Destroy(colUp.GetComponent<Collider>());
         Destroy(colDown.GetComponent<Collider>());
-        colDown.layer = LayerMask.NameToLayer("Mission");
-        colUp.layer = LayerMask.NameToLayer("Mission");
+
+        colDown.layer = missionLayer;
+        colUp.layer = missionLayer;
         colUp.transform.localPosition = Vector3.zero;
         colUp.transform.localScale = new Vector3(0.1f, 1f, 0.06f);
         colDown.transform.localPosition = Vector3.zero;
         colDown.transform.localScale = new Vector3(0.1f, 1f, 0.06f);
-        RaycastHit[] hits = Physics.RaycastAll(clickedWp.transform.position, Vector3.down, 1000f, LayerMask.GetMask("Mission", "Default"));
-        RaycastHit[] hitsUp = Physics.RaycastAll(clickedWp.transform.position, Vector3.up, 1000f, LayerMask.GetMask("Mission"));
+
+        RaycastHit[] hits = Physics.RaycastAll(clickedWp.transform.position, Vector3.down, 1000f, missionGndMask);
+        RaycastHit[] hitsUp = Physics.RaycastAll(clickedWp.transform.position, Vector3.up, 1000f, missionMask);
 
         if (hits.Length > 0) {
             lowestHit = hits[0];
             highestWp = clickedWp;
             float highestY = clickedWp.transform.position.y;
-            Waypointscol.Clear();
-            Waypointscol.Add(clickedWp);
+
+            waypointsCol.Clear();
+            waypointsCol.Add(clickedWp);
+
             foreach (RaycastHit hit in hits) {
                 if (lowestHit.point.y > hit.point.y) {
                     lowestHit = hit;
                 }
-                if (hit.transform.GetComponent<WaypointSelect>() != null && !Waypointscol.Contains(hit.transform.GetComponent<WaypointSelect>())) {
-                    Waypointscol.Add(hit.transform.GetComponent<WaypointSelect>());
+                WaypointSelect wp = hit.transform.GetComponent<WaypointSelect>();
+                if (wp != null && !waypointsCol.Contains(wp)) {
+                    waypointsCol.Add(wp);
                 }
             }
             foreach (RaycastHit hit in hitsUp) {
@@ -185,34 +200,27 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
                     highestY = hit.point.y;
                     highestWp = wp;
                 }
-                if (wp != null && !Waypointscol.Contains(wp)) {
-                    Waypointscol.Add(wp);
+                if (wp != null && !waypointsCol.Contains(wp)) {
+                    waypointsCol.Add(wp);
                 }
             }
 
             //set pipe to the ground hit
-            colDown.transform.position = (lowestHit.point + clickedWp.transform.position) / 2;
-            float dist = Vector3.Distance(clickedWp.transform.position, lowestHit.point);
-            colDown.transform.localScale = new Vector3(0.1f, dist / 2, 0.06f);
-            colDown.transform.up = (clickedWp.transform.position - lowestHit.point).normalized;
+            PosCylinder(colDown, lowestHit.point, clickedWp.transform.position);
 
             //set the pipe to the sky
-            colUp.transform.position = (clickedWp.transform.position + highestWp.transform.position) / 2;
-            float distUp = Vector3.Distance(clickedWp.transform.position, highestWp.transform.position);
-            colUp.transform.localScale = new Vector3(0.1f, distUp / 2, 0.06f);
-            colUp.transform.up = (highestWp.transform.position - clickedWp.transform.position).normalized;
-            Debug.Log("Created column");
+            PosCylinder(colUp, clickedWp.transform.position, highestWp.transform.position);
 
             colDown.transform.parent = clickedWp.transform;
             colUp.transform.parent = clickedWp.transform;
 
-            HandleArrows arrowsInst = FindObjectOfType<HandleArrows>();
-            if (arrowsInst != null) {
+            handleArrows = FindObjectOfType<HandleArrows>();
+            if (handleArrows != null) {
                 //create only up arrow
-                yArrow = arrowsInst.CreateArrow(Vector3.up, Color.green);
+                yArrow = handleArrows.CreateArrow(Vector3.up, Color.green);
 
                 //create xz drag
-                xzDisk = createRing(1.5f, 0.15f, 48);
+                xzDisk = CreateRing(1.5f, 0.15f, 48);
 
                 groundArrowsContainer = new GameObject("GroundArrows");
                 groundArrowsContainer.transform.position = lowestHit.point;
@@ -222,33 +230,15 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
 
                 yArrow.transform.localScale = new Vector3(2f, 2f, 2f);
                 yArrow.transform.localPosition = Vector3.zero;
-                xzDisk.transform.localScale = new Vector3(1f, 1f, 1f);
+                xzDisk.transform.localScale = Vector3.one;
                 xzDisk.transform.localPosition = Vector3.zero;
 
                 ygrafic = yArrow.GetComponentsInChildren<Renderer>();
                 diskGraphic = xzDisk.GetComponentsInChildren<Renderer>();
 
-                hideCol(); //only in drag
+                ShowCol(false); //only in drag
                 created = true;
             }
-        }
-    }
-
-    private void showCol() {
-        if (colUp != null) {
-            colUp.SetActive(true);
-        }
-        if (colDown != null) {
-            colDown.SetActive(true);
-        }
-    }
-
-    private void hideCol() {
-        if (colUp != null) {
-            colUp.SetActive(false);
-        }
-        if (colDown != null) {
-            colDown.SetActive(false);
         }
     }
 
@@ -265,7 +255,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             //ring follow ground
             Vector3 currXZPos = groundArrowsContainer.transform.position;
             Ray gndRay = new Ray(currXZPos + Vector3.up * 1000f, Vector3.down);
-            RaycastHit[] gndHits = Physics.RaycastAll(gndRay, 2000f, LayerMask.GetMask("Default"));
+            RaycastHit[] gndHits = Physics.RaycastAll(gndRay, 2000f, gndMask);
             if (gndHits.Length > 0) {
                 float low = float.MaxValue;
                 foreach (RaycastHit hit in gndHits) {
@@ -278,8 +268,10 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
     }
 
     private void Dragging(ArrowType type) {
-        ResetHighlight(ygrafic);
-        ResetHighlight(diskGraphic);
+        if (ygrafic != null)
+            ResetHighlight(ygrafic);
+        if (diskGraphic != null)
+            ResetHighlight(diskGraphic);
 
         draggingArrow = type;
         startPos = groundArrowsContainer.transform.position;
@@ -292,23 +284,22 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         } else {
             planeNormal = Vector3.up;
             SetHighlight(diskGraphic, Color.cyan);
-            showCol(); //show col only in drag
+            ShowCol(true); //show col only in drag
         }
 
         this.plane = new Plane(planeNormal, groundArrowsContainer.transform.position);
 
         //init drag in mission editor
         if (missioneditor != null) {
-            missioneditor.InitDragColumn(Waypointscol);
+            missioneditor.InitDragColumn(waypointsCol);
         }
     }
 
     private void UpdateDragging() {
         Ray r = cam.ScreenPointToRay(Input.mousePosition);
-        float dist;
 
         //if ray hits plane we move the arrow
-        if (plane.Raycast(r, out dist)) {
+        if (plane.Raycast(r, out float dist)) {
             Vector3 hitplace = r.GetPoint(dist);
             Vector3 diff = hitplace - startPos;
 
@@ -321,7 +312,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             }
 
             //groundArrowsContainer.transform.position += offset;
-            missioneditor.MoveWaypointColumn(Waypointscol, offset);
+            missioneditor.MoveWaypointColumn(waypointsCol, offset);
             startPos = hitplace;
 
             UpdateColLen();
@@ -329,14 +320,14 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
     }
 
     private void UpdateColLen() {
-        if (colUp == null || colDown == null || wp == null || Waypointscol.Count == 0)
+        if (colUp == null || colDown == null || wp == null || waypointsCol.Count == 0)
             return;
 
         //highest and lowest waypoint
-        WaypointSelect lowWp = Waypointscol[0];
-        WaypointSelect highWp = Waypointscol[0];
+        WaypointSelect lowWp = waypointsCol[0];
+        WaypointSelect highWp = waypointsCol[0];
 
-        foreach (WaypointSelect waypoint in Waypointscol) {
+        foreach (WaypointSelect waypoint in waypointsCol) {
             if (waypoint.transform.position.y < lowWp.transform.position.y) {
                 lowWp = waypoint;
             }
@@ -350,17 +341,12 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         //downcol update
         Ray downRay = new Ray(lowPos, Vector3.down);
         RaycastHit gndHit;
-        if (Physics.Raycast(downRay, out gndHit, 1000f, LayerMask.GetMask("Mission", "Default"))) {
+        if (Physics.Raycast(downRay, out gndHit, 1000f, missionGndMask)) {
             lowestHit = gndHit;
             colDown.transform.parent = null; //standalone obj
 
-            Vector3 centerP = (gndHit.point + lowPos) / 2.0f;
-            float colLen = Vector3.Distance(lowPos, gndHit.point);
-
-            colDown.transform.position = centerP;
-            colDown.transform.localScale = new Vector3(0.1f, colLen / 2f, 0.06f);
-            colDown.transform.up = (lowPos - gndHit.point).normalized;
-            colDown.transform.parent = lowWp.transform; //connect to lowest waypoint
+            PosCylinder(colDown, gndHit.point, lowPos);
+            colDown.transform.parent = lowWp.transform;
         }
 
         //update upcol
@@ -369,45 +355,42 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             Vector3 highPos = highWp.transform.position; //copy of pos
             colUp.transform.parent = null;
 
-            Vector3 centerPoint = (lowPos + highPos) / 2.0f;
-            float columnLength = Vector3.Distance(lowPos, highPos);
-
-            colUp.transform.position = centerPoint;
-            colUp.transform.localScale = new Vector3(0.1f, columnLength / 2f, 0.06f);
-            colUp.transform.up = (highPos - lowPos).normalized;
-            colUp.transform.parent = lowWp.transform; //connect to lowest waypoint
+            PosCylinder(colUp, lowPos, highPos);
+            colUp.transform.parent = lowWp.transform;
         } else {
+            ShowCol(false);
             colUp.transform.localScale = Vector3.zero; //delete if only one wp
         }
     }
 
+    private void PosCylinder(GameObject cyl, Vector3 from, Vector3 to) {
+        cyl.transform.position = (from + to) / 2f;
+        cyl.transform.localScale = new Vector3(0.1f, Vector3.Distance(from, to) / 2f, 0.06f);
+        cyl.transform.up = (to - from).normalized;
+    }
+
     public void DestroyCol() {
+        Destroy(colUp);
+        Destroy(colDown);
+        Destroy(groundArrowsContainer);
+        Destroy(xzDisk);
+        Destroy(yArrow);
+
+        yArrow = null;
+        colUp = null;
+        colDown = null;
+        groundArrowsContainer = null;
+        xzDisk = null;
+        waypointsCol.Clear();
+    }
+
+    private void ShowCol(bool show) {
         if (colUp != null) {
-            Destroy(colUp);
-            colUp = null;
+            colUp.SetActive(show);
         }
-
         if (colDown != null) {
-            Destroy(colDown);
-            colDown = null;
+            colDown.SetActive(show);
         }
-
-        if (groundArrowsContainer != null) {
-            Destroy(groundArrowsContainer);
-            groundArrowsContainer = null;
-        }
-
-        if (xzDisk != null) {
-            Destroy(xzDisk);
-            xzDisk = null;
-        }
-
-        if (yArrow != null) {
-            Destroy(yArrow);
-            yArrow = null;
-        }
-
-        Waypointscol.Clear();
     }
 
     private void ResetHighlight(Renderer[] grafics) {

@@ -33,7 +33,7 @@ public class Navigator : MonoBehaviour {
     public float timeTakeOver = 10f; //seconds without movement = user took over
     public float waypointTime = 3f; //seconds after reaching a waypoint before stale check resumes
     private float waypointTimer = 0f;
-    private bool reverseOrder = false; //for testing, fly waypoints in reverse order
+    public bool reverseOrder = false;
     private bool rotating = false;
 
     private float lastCmdPitch = 0f;

@@ -124,7 +124,7 @@ public class MissionEditor : MonoBehaviour {
                         HandleArrows nav = gizmo.AddComponent<HandleArrows>();
                         nav.wp = selectedPoint.transform;
                         nav.missioneditor = this;
-                        ColumnGizmo.Instance.createCol(selectedPoint);
+                        ColumnGizmo.Instance.CreateCol(selectedPoint);
                     }
                 } else {
                     if (gizmo != null)

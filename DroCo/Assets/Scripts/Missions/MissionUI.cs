@@ -22,6 +22,7 @@ public class MissionUI : MonoBehaviour {
     public Image missionImage;
     public Button startMissionButton;
     public TMP_Text startMissionButtonText;
+    public TMP_Text missionNameTop;
     public Image startMissionButtonImage;
     public Transform waypointContent;
     public Transform missionContent;
@@ -85,6 +86,7 @@ public class MissionUI : MonoBehaviour {
         if (missionName != null) {
             missionName.onValueChanged.AddListener(MissionNameChanged);
             missionName.text = "NewMission";
+            missionNameTop.text = "NewMission";
         }
         if (scanDist != null)
             scanDist.onEndEdit.AddListener(ScanDistChanged);
@@ -144,6 +146,8 @@ public class MissionUI : MonoBehaviour {
         currentMissionName = name ?? "NewMission";
         if (missionName != null)
             missionName.text = currentMissionName;
+        if (missionNameTop != null)
+            missionNameTop.text = currentMissionName;
         if (scanDist != null)
             scanDist.text = missionController.GetScanDistance().ToString();
         if (verticalStep != null)
@@ -213,6 +217,8 @@ public class MissionUI : MonoBehaviour {
             return;
         }
         currentMissionName = value;
+        if (missionNameTop != null)
+            missionNameTop.text = currentMissionName;
     }
 
     private void ScanDistChanged(string value) {
