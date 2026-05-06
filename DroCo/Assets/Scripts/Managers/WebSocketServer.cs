@@ -70,13 +70,11 @@ public class WebSocketServerBehavior : WebSocketBehavior {
 
     protected override void OnMessage(MessageEventArgs e) {
         base.OnMessage(e);
-
-        //Debug.Log(e.Data);
-        //Debug.Log("Received message at " + System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
         string jsonText = "";
 
+        //xsovakv00 2026-03-20
+        //added handling of binary messages
         if (e.IsBinary) {
-            //Debug.Log($"data is in binary format with length {e.RawData.Length} bytes");
             //read the json length
             byte[] raw = e.RawData;
             int jsonLength = (raw[0] << 24) | (raw[1] << 16) | (raw[2] << 8) | raw[3];
@@ -85,33 +83,9 @@ public class WebSocketServerBehavior : WebSocketBehavior {
                 return;
 
             jsonText = System.Text.Encoding.UTF8.GetString(raw, 4, jsonLength);
-
-            //random debug to see the data
-            if (new System.Random().Next(100) < 5) {
-                //Debug.Log("ROZBALENY JSON: " + jsonText);
-            }
-
-            /*
-            try {
-                Message<DroneFlightData> dfd = JsonUtility.FromJson<Message<DroneFlightData>>(jsonText);
-                if (dfd != null && dfd.data != null) {
-                    UnityMainThreadDispatcher.Instance().Enqueue(UpdateDroneFlightData(dfd.data));
-                }
-            } catch (System.Exception ex) {
-                Debug.LogError("Chyba parsovani rozbaleneho JSONu: " + ex.Message);
-            }
-            */
-
-            /*
-            int imageStartIndex = 4 + jsonLength + 4;
-            int imageLength = raw.Length - imageStartIndex;
-            byte[] jpegBytes = new byte[imageLength];
-            System.Buffer.BlockCopy(raw, imageStartIndex, jpegBytes, 0, imageLength);
-            */
             HandleBinaryMessage(e.RawData);
             return;
         } else {
-            Debug.Log($"data is in text format: {e.Data}");
             jsonText = e.Data;
         }
 
@@ -128,14 +102,13 @@ public class WebSocketServerBehavior : WebSocketBehavior {
         if (msg.type == "hello") {
             DoHandshake(ID, JsonUtility.FromJson<Message<Hello>>(jsonText));
         } else if (handshake_done && msg.type == "data_broadcast") {
-
             Message<DroneFlightData> dfd = JsonUtility.FromJson<Message<DroneFlightData>>(jsonText);
-
             UnityMainThreadDispatcher.Instance().Enqueue(UpdateDroneFlightData(dfd.data));
-        } else if (handshake_done && msg.type == "status_update") {
-            //Debug.Log("Received status update message: " + jsonText);
+        }
+        //xsovakv00 2026-03-20
+        //added handling of status updates, mission status/progress messages
+        else if (handshake_done && msg.type == "status_update") {
             Message<DroneStatusData> status = JsonUtility.FromJson<Message<DroneStatusData>>(jsonText);
-            //Debug.Log("Parsed status update for drone " + status.data);
             UnityMainThreadDispatcher.Instance().Enqueue(HandleStatusUpdate(status.data));
         } else if (handshake_done && msg.type == "mission_status") {
             Message<MissionStatusData> missionStatus = JsonUtility.FromJson<Message<MissionStatusData>>(jsonText);
@@ -152,7 +125,6 @@ public class WebSocketServerBehavior : WebSocketBehavior {
         base.OnClose(e);
         Debug.Log("Connection close: " + e.Reason);
         UnityMainThreadDispatcher.Instance().Enqueue(HandleClientDisconnected());
-
     }
 
     protected override void OnError(ErrorEventArgs e) {
@@ -185,38 +157,37 @@ public class WebSocketServerBehavior : WebSocketBehavior {
         UnityMainThreadDispatcher.Instance().Enqueue(AddDrone(newDrone));
     }
 
+    //xsovakv00 2026-03-20
+    //added method to handle incoming binary messages containing flight data and JPEG frames
     private void HandleBinaryMessage(byte[] data) {
-        //Debug.Log($"Received Binary Message, size: {data.Length}");
 
         if (!handshake_done) {
             Debug.LogWarning("Binary message received before handshake done, ignoring.");
             return;
         }
 
-        // 1. First 4 bytes = JSON length
+        //first 4 bytes
         int jsonLength = System.BitConverter.ToInt32(data, 0);
-        jsonLength = System.Net.IPAddress.NetworkToHostOrder(jsonLength); // convert big-endian to little-endian
+        jsonLength = System.Net.IPAddress.NetworkToHostOrder(jsonLength);
 
         if (data.Length < 4 + jsonLength) {
             Debug.LogError("Invalid binary message: JSON length larger than payload.");
             return;
         }
 
-        // 2. Extract JSON bytes
         byte[] jsonBytes = new byte[jsonLength];
         System.Buffer.BlockCopy(data, 4, jsonBytes, 0, jsonLength);
 
         string jsonString = System.Text.Encoding.UTF8.GetString(jsonBytes);
-        //Debug.Log("Received JSON: " + jsonString);
 
-        // 3. Parse DroneFlightData
+        //parse bytes into droneflightdata
         Message<DroneFlightData> dfd = JsonUtility.FromJson<Message<DroneFlightData>>(jsonString);
         if (dfd == null) {
             Debug.LogError("Failed to parse DroneFlightData!");
             return;
         }
 
-        // 4.Extract JPEG image bytes(if any)
+        //extract the image
         int jpegStart = 4 + jsonLength + 4;
         int jpegLength = data.Length - jpegStart;
 
@@ -228,8 +199,6 @@ public class WebSocketServerBehavior : WebSocketBehavior {
             Debug.LogWarning("No JPEG image found in binary message.");
         }
 
-        // Push the data to the queue to process only the newest one (if connection is e.g. slow, discard the old flight data and process only the newest)
-        //Debug.Log("Received video data for drone");
         DroneDataPoller.Instance?.PushLatestData(dfd.data);
     }
 

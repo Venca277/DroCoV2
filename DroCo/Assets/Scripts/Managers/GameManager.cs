@@ -53,6 +53,7 @@ public class GameManager : Singleton<GameManager> {
 
     private bool carDetectorRunning = false;
 
+    public bool userCenter = false;
     private bool mapCentered = false;
     private DroneFlightData firstDroneFlightData;
 
@@ -75,6 +76,12 @@ public class GameManager : Singleton<GameManager> {
         get; private set;
     }
 
+    private void Update() {
+        if (userCenter && UnityEngine.Input.GetKeyDown(KeyCode.C)) {
+            ArcGISPoint camPos = MainCamera.GetComponent<ArcGISLocationComponent>().Position;
+            ForceCenterMap(camPos.Y, camPos.X, camPos.Z);
+        }
+    }
 
     private void Start() {
         ChangeAppMode(defaultAppMode);
@@ -256,6 +263,41 @@ public class GameManager : Singleton<GameManager> {
         }
     }
 
+    //xsovakv00 2026-05-05
+    //added force method used to center map on code call or user input
+    public void ForceCenterMap(double lat, double lon, double alt) {
+        //create flightdata for cratearcgismap to determine location
+        if (firstDroneFlightData == null)
+            firstDroneFlightData = new DroneFlightData();
+        if (firstDroneFlightData.gps == null)
+            firstDroneFlightData.gps = new GPS();
+        firstDroneFlightData.gps.latitude = lat;
+        firstDroneFlightData.gps.longitude = lon;
+        firstDroneFlightData.altitude = alt;
+
+        //center the 3D scene map
+        Scene3DViewArcGISMap.OriginPosition = new ArcGISPoint(lon, lat, alt, new ArcGISSpatialReference(4326));
+        Scene3DViewArcGISMap.MapType = ArcGISMapType.Global;
+        Scene3DViewArcGISMap.MapTypeChanged -= new ArcGISMapComponent.MapTypeChangedEventHandler(CreateArcGISMap);
+        Scene3DViewArcGISMap.MapTypeChanged += new ArcGISMapComponent.MapTypeChangedEventHandler(CreateArcGISMap);
+        CreateArcGISMap();
+
+        //center the 2D minimap
+        Map2DViewArcGISMap.OriginPosition = new ArcGISPoint(lon, lat, 0, new ArcGISSpatialReference(4326));
+        Map2DViewArcGISMap.MapType = ArcGISMapType.Global;
+
+        //move main camera
+        ArcGISLocationComponent cameraLocationComponent = MainCamera.GetComponent<ArcGISLocationComponent>();
+        cameraLocationComponent.enabled = true;
+        cameraLocationComponent.Position = new ArcGISPoint(lon, lat, alt + 50, new ArcGISSpatialReference(4326));
+
+        //move minimap camera
+        ArcGISLocationComponent minimapCameraLocationComponent = MinimapCamera.GetComponent<ArcGISLocationComponent>();
+        minimapCameraLocationComponent.enabled = true;
+        minimapCameraLocationComponent.Position = new ArcGISPoint(lon, lat, 500, new ArcGISSpatialReference(4326));
+        //mapCentered = true;
+        Toast.call.Show("Map centered", 2.0f);
+    }
 
     private void DestroyCurrentArcGISMap() {
         Scene3DViewArcGISMap.enabled = false;
