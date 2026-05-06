@@ -1,3 +1,15 @@
+// ============================================================
+// MissionEditor.cs
+// 
+// Author: Václav Sovák
+// Date: 2026-05-05
+// 
+// Handles interactive editing of mission waypoints
+// in scene. Supports select, multiselect, free drag, 
+// axis drag with HandleArrows gizmo, and 
+// column drag via ColumnGizmo.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
@@ -17,10 +29,11 @@ public class MissionEditor : MonoBehaviour {
     private GameObject gizmo;
     private List<WaypointSelect> selectedWaypoints = new List<WaypointSelect>();
     private ArcGISCameraControllerTouch cam;
-    private bool iAmHolding = false;
-    private Vector3 lastMouseClick;
-    private Plane plane;
+    private bool iAmHolding = false;    //free drag active
+    private Vector3 lastMouseClick;     //last mouse pos at last frame
+    private Plane plane;                //plane for dragging
 
+    //saved tubes and positions for dragging
     private Dictionary<WaypointSelect, List<GameObject>> savedTubes = new Dictionary<WaypointSelect, List<GameObject>>();
     private Dictionary<WaypointSelect, Vector3> lastWPpositions = new Dictionary<WaypointSelect, Vector3>();
     private float lastUpdate = 0f;
@@ -74,6 +87,7 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
+    //selects one or more waypoints with click
     private void Selected() {
         selectedWaypoints.RemoveAll(wp => wp == null);
         Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition); //cast ray
@@ -111,11 +125,7 @@ public class MissionEditor : MonoBehaviour {
                     selectedPoint.Select(true);
                     UIGizmo.SetSelectedWaypoint(selectedPoint.transform);
 
-                    //TODO remove
-                    Debug.Log(selectedPoint.name);
-
                     //one is selected and no arrows currently
-                    //TODO: support gizmoing with more selected
                     if (selectedWaypoints.Count == 1 && gizmo == null) {
                         //create gizmo
                         //assign missioneditor
@@ -138,6 +148,7 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
+    //returns world hit on plane
     private Vector3 GetCoords() {
         Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
         float pp;
@@ -186,7 +197,7 @@ public class MissionEditor : MonoBehaviour {
                 lastWPpositions[waypoint] = waypoint.transform.position;
             }
 
-            //shift moves waypoint in vertical
+            //shift key moves waypoint in vertical
             //otherwise free horizontal move
             bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKeyDown(KeyCode.RightShift);
             if (shift) {
@@ -202,6 +213,7 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
+    //returns all tubes connected to a waypoint
     public List<GameObject> FindTubesWaypoint(GameObject wp) {
         if (missionGenerator != null && missionGenerator.waypoints.ContainsKey(wp)) {
             return missionGenerator.waypoints[wp].tubes;
@@ -209,6 +221,7 @@ public class MissionEditor : MonoBehaviour {
         return new List<GameObject>();
     }
 
+    //recalculate tube positions between two waypoints
     public void UpdateTubes(List<GameObject> tubes, Vector3 oldwaypoint, Vector3 newwaypoint) {
         foreach (GameObject tube in tubes) {
 
@@ -227,6 +240,7 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
+    //update tubes for all selected waypoints
     public void UpdateSelectedTubes() {
         for (int i = 0; i < selectedWaypoints.Count; i++) {
             WaypointSelect wp = selectedWaypoints[i];
@@ -238,6 +252,7 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
+    //updates the position of arrows and the waypoint
     private void UpdateDragging() {
         //drag only with arrows
         bool arrows = gizmo != null && gizmo.GetComponent<HandleArrows>() != null && gizmo.GetComponent<HandleArrows>().dragging;
@@ -278,6 +293,7 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
+    //deselects all waypoints
     private void Deselect() {
         selectedWaypoints.RemoveAll(wp => wp == null);
         //deselect all
@@ -295,6 +311,7 @@ public class MissionEditor : MonoBehaviour {
         UIGizmo.SetSelectedWaypoint(null);
     }
 
+    //destroy gizmo and deselect waypoint
     private void DestroyGizmo(WaypointSelect wp) {
         GameObject cyl = wp.transform.Find("ColumnDown")?.gameObject;
         GameObject cyl2 = wp.transform.Find("ColumnUp")?.gameObject;
@@ -308,6 +325,7 @@ public class MissionEditor : MonoBehaviour {
         UIGizmo.SetSelectedWaypoint(null);
     }
 
+    //adds to selection all waypoints in the selectionBox
     public void SelectBox(List<GameObject> wps) {
         Deselect();
         foreach (GameObject wp in wps) {
@@ -321,6 +339,7 @@ public class MissionEditor : MonoBehaviour {
             UIGizmo.SetSelectedWaypoint(selectedWaypoints[0].transform);
     }
 
+    //init the drag move of the arrows
     public void InitDragArr(WaypointSelect wp) {
         //clear lists
         savedTubes.Clear();
@@ -332,6 +351,7 @@ public class MissionEditor : MonoBehaviour {
         cam.enabled = false;
     }
 
+    //init drag of column gizmo
     public void InitDragColumn(List<WaypointSelect> colWaypoints) {
         //clear list
         savedTubes.Clear();
@@ -349,6 +369,7 @@ public class MissionEditor : MonoBehaviour {
         return selectedWaypoints.Count > 0;
     }
 
+    //move single waypoint to new position
     public void MoveWaypoint(WaypointSelect wp, Vector3 newPos) {
         Vector3 oldPos = wp.transform.position;
         wp.transform.position = newPos;
@@ -373,16 +394,20 @@ public class MissionEditor : MonoBehaviour {
         }
     }
 
+    //moves all selected waypoints by offset
     public void MoveWaypoints(Vector3 off) {
         foreach (WaypointSelect wp in selectedWaypoints) {
             Vector3 oldPos = wp.transform.position;
             wp.transform.position = oldPos + off;
             UpdateTubes(FindTubesWaypoint(wp.gameObject), oldPos, wp.transform.position);
         }
+
+        if (gizmo != null)
+            gizmo.transform.position += off;
     }
 
+    //move all waypoints in column
     public void MoveWaypointColumn(List<WaypointSelect> colWaypoints, Vector3 offset) {
-        //move all waypoints in column
         foreach (WaypointSelect wp in colWaypoints) {
             //add offset
             Vector3 oldPos = wp.transform.position;

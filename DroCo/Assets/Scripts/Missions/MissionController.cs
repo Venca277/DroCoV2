@@ -1,13 +1,23 @@
+// ============================================================
+// MissionController.cs
+// 
+// Author: Václav Sovák
+// Date: 2026-05-05
+// 
+// Central controller for drone scan missions.
+// Bridges MissionGenerator, Navigator, MissionUI, Settings and
+// the network layer. Handles mission preparation,
+// start, stop, save, load, waypoint editing and undo.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Newtonsoft.Json;
 using System.IO;
-//using System.Windows.Input;
 using Esri.GameEngine.Geometry;
 using System.Linq;
 using System.Net;
-//using UnityEngine.TestTools.Constraints;
 
 public class MissionController : MonoBehaviour {
 
@@ -18,6 +28,7 @@ public class MissionController : MonoBehaviour {
     public Navigator navigator;
 
     [Header("Starting Point")]
+    //initial values, updated on drone data receive
     public double startLat = 49.226015;
     public double startLon = 16.597071;
     public double startAlt = 250.0;
@@ -27,19 +38,23 @@ public class MissionController : MonoBehaviour {
     public float paramMinHeight = 10f;
     public float paramOverlap = 0.5f;
 
+    //state for undo operations in stack
+    private struct UndoChanges {
+        public List<(Vector3 pos, int level, Vector3 normal)> waypoints;
+        public List<Vector3> footprint;
+    }
+    private Stack<UndoChanges> undoStack = new Stack<UndoChanges>();
     public MissionData currentMission;
-    //TODO delete later
-    //public List<Vector3> curentMissionNormals;
-    public List<Vector3> currentMissionSticks;
+    public List<Vector3> currentMissionSticks;  //list of world point for navigator process
     public Vector3 missionCenter;
     private GameObject currBuilding;
     private List<Vector3> currFootprint;
-    //private List<Vector3> deletedPositions = new List<Vector3>();
-    //private bool redeleting = false;
+    private float currbuildingHeight = 0f;
     public bool autoConnect = false;
-    private bool snakeMode = false;
+    private bool snakeMode = false;     //user flag for reconnecting path
 
     void Update() {
+        //update starting point from drone data
         if (droneManager == null)
             return;
 
@@ -56,9 +71,8 @@ public class MissionController : MonoBehaviour {
         startAlt = drone.FlightData.altitude;
     }
 
+    //prepare mission data structure from building and generated path
     public void PrepareMission(GameObject building, List<Vector3> footprint) {
-        Debug.Log("PREPARING MISSION...");
-
         List<Vector3> rawHelixUnity = generator.GenerateScanPath(building, footprint);
 
         if (rawHelixUnity == null || rawHelixUnity.Count == 0) {
@@ -66,12 +80,13 @@ public class MissionController : MonoBehaviour {
             return;
         }
 
-        //convert to gps and sort
+        //sort waypoints by idx with normals
         List<GameObject> wps = generator.GetMissionWaypoints();
         wps.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
         List<Vector3> norms = generator.GetNormalsOrdered(wps);
         List<GPSWaypoint> gpsHelix = generator.ConvertToGPSCoordinates(rawHelixUnity, norms);
 
+        //prepare mission data structure
         MissionData complexMission = new MissionData {
             route = new Route {
                 name = "mission_scan",
@@ -107,6 +122,7 @@ public class MissionController : MonoBehaviour {
         currentMission = complexMission;
     }
 
+    //rebuild mission with scene data after user editations
     private void UpdateMissionFromWaypoints() {
         List<GameObject> allwps = generator.GetMissionWaypoints();
         allwps.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
@@ -116,7 +132,7 @@ public class MissionController : MonoBehaviour {
             updatedPath.Add(wp.transform.position);
         }
 
-        //update current mission for sticks
+        //update current mission for virtual sticks mode
         currentMissionSticks = updatedPath;
         List<GPSWaypoint> updatedGPS = generator.ConvertToGPSCoordinates(updatedPath, null);
 
@@ -132,6 +148,7 @@ public class MissionController : MonoBehaviour {
         AddPointToSegment(currentMission.route.segments[0], startLat, startLon, startAlt);
     }
 
+    //helper method to add point into given mission segment
     private void AddPointToSegment(Segment segment, double lat, double lon, double alt, float speed = 5.0f, float heading = 0.0f, float gimbalPitch = -45.0f, float gimbalYaw = 0.0f) {
         Point p = new Point();
         p.latitude = lat;
@@ -145,6 +162,7 @@ public class MissionController : MonoBehaviour {
         segment.multipoint.points.Add(p);
     }
 
+    //regenerate path in snake pattern
     private void RegenerateSnake() {
         if (currBuilding == null || currFootprint == null || currFootprint.Count < 2)
             return;
@@ -159,6 +177,7 @@ public class MissionController : MonoBehaviour {
         Vector3 footprintCenter = generator.GetMissionCenter(currFootprint);
         footprintCenter.y = 0;
 
+        //for each waypoint find closest footprint edge and push out by scanDistance
         foreach (GameObject wp in allWPs) {
             Vector3 pos = new Vector3(wp.transform.position.x, 0, wp.transform.position.z);
 
@@ -176,10 +195,6 @@ public class MissionController : MonoBehaviour {
                     continue;
                 Vector3 edgeDir = edge / edgeLen;
 
-                /*
-                float t = Mathf.Clamp01(dot / edgeLen);
-                Vector3 projection = A + edgeDir * (t * edgeLen);
-                */
                 float dot = Vector3.Dot(pos - A, edgeDir);
                 float t = Mathf.Clamp(dot, 0f, edgeLen);
                 Vector3 projection = A + edgeDir * t;
@@ -191,7 +206,7 @@ public class MissionController : MonoBehaviour {
 
 
                     Vector3 normal = new Vector3(edgeDir.z, 0, -edgeDir.x);
-                    //out of the center
+                    //flip normal out of the center
                     if (Vector3.Dot(bestProjection - footprintCenter, normal) < 0)
                         normal = -normal;
                     bestNormal = normal;
@@ -210,6 +225,7 @@ public class MissionController : MonoBehaviour {
         float baseY = col != null ? col.bounds.min.y + 2.0f : allWPs[0].transform.position.y;
         float maxY = col != null ? col.bounds.max.y + 1.0f : float.MaxValue;
 
+        //group by level and redistribute vertically 
         Dictionary<int, List<GameObject>> byLevel = new Dictionary<int, List<GameObject>>();
         foreach (GameObject wp in allWPs) {
             int lvl = generator.GetWaypointLevel(wp);
@@ -227,23 +243,8 @@ public class MissionController : MonoBehaviour {
             }
         }
 
-        /*
-        HashSet<GameObject> tubesToDestroy = new HashSet<GameObject>();
-        foreach (GameObject wp in allWPs) {
-            if (!generator.tubeMap.ContainsKey(wp))
-                continue;
-            foreach (GameObject tube in generator.tubeMap[wp])
-                if (tube != null)
-                    tubesToDestroy.Add(tube);
-            generator.tubeMap[wp].Clear();
-        }
-        foreach (GameObject tube in tubesToDestroy) {
-            generator.spawnedObjects.Remove(tube);
-            Destroy(tube);
-        }
-        */
+        //regenerate tubes for new connections
         generator.RemoveTubes(allWPs);
-
         if (generator.use3DTubes) {
             for (int i = 0; i < allWPs.Count - 1; i++)
                 generator.AddTube(allWPs[i], allWPs[i + 1]);
@@ -254,13 +255,14 @@ public class MissionController : MonoBehaviour {
         snakeMode = true;
     }
 
+    //regenerate path with current parameters
     public bool Regenerate() {
         if (currBuilding == null || currFootprint == null)
             return false;
 
         if (snakeMode) {
             RegenerateSnake();
-            return false;
+            return false;   //repositioning only
         }
 
         //generator updates path on parameter change
@@ -275,6 +277,7 @@ public class MissionController : MonoBehaviour {
         return true;
     }
 
+    //wraps up data and broadcast to all clients
     private void SendMissionToNetwork(MissionData dataStructure) {
         if (WebSocketServer.Instance == null) {
             Debug.LogError("WebSocketServer not running!");
@@ -286,13 +289,14 @@ public class MissionController : MonoBehaviour {
         msg.type = "mission_upload";
         msg.data = dataStructure;
 
-        //srialize to json
+        //serialize to json
         string json = JsonConvert.SerializeObject(msg);
 
         //send to all clients
         WebSocketServer.Instance.BroadcastToAll(json);
     }
 
+    //starts mission in desired mode
     public void MissionStart() {
         //loads mission into drone over network in waypoint mission
         //starts mission with virtual sticks navigator takes control
@@ -312,6 +316,7 @@ public class MissionController : MonoBehaviour {
         }
     }
 
+    //immediate stop of the drone and mission
     public void MissionStop() {
         //use controller command to stop with virtual sticks
         //use json command in waypoint mission to stop
@@ -326,6 +331,7 @@ public class MissionController : MonoBehaviour {
         }
     }
 
+    //saves current building and missiondata into json file
     public string SaveMission(string name = "none") {
         if (currentMission == null)
             return null;
@@ -346,6 +352,7 @@ public class MissionController : MonoBehaviour {
         ArcGISPoint top = generator.mapComponent.EngineToGeographic(new Vector3(b.center.x, b.max.y, b.center.z));
         info.minY = (float) down.Z;
         info.maxY = (float) top.Z;
+        info.buildingHeight = currbuildingHeight;
 
         info.footprint = new List<GpsCorner>();
         foreach (Vector3 p in currFootprint) {
@@ -371,6 +378,7 @@ public class MissionController : MonoBehaviour {
         return path;
     }
 
+    //load mission from file, recreate building and path in scene
     public bool LoadMission(string path) {
         if (!File.Exists(path)) {
             Toast.call.Show($"Mission file not found!", 2f, true);
@@ -384,6 +392,11 @@ public class MissionController : MonoBehaviour {
             Toast.call.Show($"Invalid mission file!", 2f, true);
             return false;
         }
+
+        //force centering map on load for clearing the floating point error
+        double centerLat = loaded.building.footprint[0].lat;
+        double centerLon = loaded.building.footprint[0].lon;
+        GameManager.Instance.ForceCenterMap(centerLat, centerLon, loaded.building.maxY);
 
         //load points
         List<Point> points = loaded.mission.route.segments[0].multipoint.points;
@@ -416,6 +429,9 @@ public class MissionController : MonoBehaviour {
         double lon = loaded.building.footprint[0].lon;
         float minY = generator.mapComponent.GeographicToEngine(new ArcGISPoint(lon, lat, loaded.building.minY, new ArcGISSpatialReference(4326))).y;
         float maxY = generator.mapComponent.GeographicToEngine(new ArcGISPoint(lon, lat, loaded.building.maxY, new ArcGISSpatialReference(4326))).y;
+        float buildingHeight = loaded.building.buildingHeight;
+        if (loaded.building.buildingHeight <= 0f)
+            buildingHeight = maxY - minY;
 
         //create ghost building
         Bounds bounds = new Bounds(footprint[0], Vector3.zero);
@@ -442,15 +458,17 @@ public class MissionController : MonoBehaviour {
         currentMission = loaded.mission;
 
         SetBuilding(ghost, footprint);
+        SetCurrentBuildingHeight(buildingHeight);
 
         //update UI about new mission, focus camera
-        MissionUI.Instance?.SetNewMission(ghost, footprint, loaded.building.name);
+        MissionUI.Instance?.SetNewMission(ghost, footprint, loaded.building.name, buildingHeight);
         Camera.main.transform.position = new Vector3(bounds.center.x, maxY + 20f, bounds.center.z);
 
         Toast.call.Show($"Mission loaded!", 2f, false);
         return true;
     }
 
+    //delete mission file
     public bool DeleteMission(string path) {
         if (!File.Exists(path)) {
             Toast.call.Show($"Mission file not found!", 2f, true);
@@ -462,52 +480,22 @@ public class MissionController : MonoBehaviour {
         return true;
     }
 
+    //remove and destroy waypoints, reconnect path with user preferred pattern
     public void DeleteWaypoints(List<GameObject> waypoints) {
         if (waypoints == null || waypoints.Count == 0 || generator == null)
             return;
 
-        //ordered
+        //add changes to the stack for undo
+        PushChanges();
+
         List<GameObject> ordered = generator.GetMissionWaypoints();
         ordered.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
 
         HashSet<GameObject> deleting = new HashSet<GameObject>(waypoints);
         List<GameObject> remaining = ordered.Where(wp => !deleting.Contains(wp)).ToList();
 
-        /*
-        //get all tubes connected
-        HashSet<GameObject> deletingTubes = new HashSet<GameObject>();
-        foreach (GameObject wp in waypoints) {
-            if (wp == null || !generator.tubeMap.ContainsKey(wp))
-                continue;
-            foreach (GameObject tube in generator.tubeMap[wp])
-                deletingTubes.Add(tube);
-        }
-
-        //remove deleted tubes from remaining WP tubeMap
-        foreach (GameObject wp in remaining) {
-            if (generator.tubeMap.ContainsKey(wp))
-                generator.tubeMap[wp].RemoveAll(t => deletingTubes.Contains(t));
-        }
-
-        //destroy tubes
-        foreach (GameObject tube in deletingTubes) {
-            generator.spawnedObjects.Remove(tube);
-            Destroy(tube);
-        }
-        */
         generator.RemoveTubes(waypoints, remaining);
         generator.RemoveWaypoint(waypoints);
-
-        /*
-        //destroy waypoints
-        foreach (GameObject wp in waypoints) {
-            if (wp == null)
-                continue;
-            generator.tubeMap.Remove(wp);
-            generator.spawnedObjects.Remove(wp);
-            Destroy(wp);
-        }
-        */
 
         ClipFootprint();
 
@@ -521,31 +509,10 @@ public class MissionController : MonoBehaviour {
             snakeMode = true;
         }
 
-        /*
-        List<int> idx = new List<int>();
-        for (int i = 0; i < ordered.Count; i++) {
-            if (deleting.Contains(ordered[i]))
-                idx.Add(i);
-        }
-        generator.RemoveNormalsIdx(idx);
-
-        
-        //refresh normals
-        if (generator.helixNormals != null) {
-            List<int> deleteIndices = ordered
-                .Select((wp, idx) => new { wp, idx })
-                .Where(x => deleting.Contains(x.wp))
-                .Select(x => x.idx)
-                .OrderByDescending(i => i)
-                .ToList();
-            foreach (int idx in deleteIndices)
-                if (idx < generator.helixNormals.Count)
-                    generator.helixNormals.RemoveAt(idx);
-        }
-        */
         MissionUI.Instance?.RefreshListUI();
     }
 
+    //reconnect path from remaining waypoints without collision
     private void ConnectPath(List<GameObject> ordered, HashSet<GameObject> deleting, List<GameObject> remaining) {
         if (generator.use3DTubes) {
             for (int i = 0; i < remaining.Count - 1; i++) {
@@ -577,6 +544,7 @@ public class MissionController : MonoBehaviour {
         }
     }
 
+    //cut footprint by line
     private void ClipFootprint() {
         List<GameObject> remaining = generator.GetMissionWaypoints();
         if (remaining == null || remaining.Count < 2)
@@ -594,7 +562,7 @@ public class MissionController : MonoBehaviour {
             int idxA = MissionGenerator.GetWaypointIdx(remaining[i]);
             int idxB = MissionGenerator.GetWaypointIdx(remaining[i + 1]);
 
-            //creating shortcuts
+            //no gap to clip
             if (idxB - idxA <= 1)
                 continue;
 
@@ -618,11 +586,12 @@ public class MissionController : MonoBehaviour {
         }
     }
 
+    //inspired by Sutherland–Hodgman algorithm for polygon clipping https://rosettacode.org/wiki/Sutherland-Hodgman_polygon_clipping
     private List<Vector3> ClipByLine(List<Vector3> polygon, Vector3 A, Vector3 B, Vector3 keepSide) {
         Vector3 lineDir = (B - A).normalized;
-        // Perpendicular in XZ plane
+        //perpendicular in XZ plane
         Vector3 normal = new Vector3(-lineDir.z, 0, lineDir.x);
-        // Orient toward centroid
+        //orient toward centroid
         if (Vector3.Dot(keepSide - A, normal) < 0)
             normal = -normal;
 
@@ -633,14 +602,14 @@ public class MissionController : MonoBehaviour {
             Vector3 curr = polygon[i];
             Vector3 next = polygon[(i + 1) % n];
 
-            // Signed distances to the clip line (XZ only)
+            //signed distances to the clip line
             float d1 = Vector3.Dot(new Vector3(curr.x, 0, curr.z) - A, normal);
             float d2 = Vector3.Dot(new Vector3(next.x, 0, next.z) - A, normal);
 
             if (d1 >= 0)
-                result.Add(curr); // inside, keep (with original Y)
+                result.Add(curr);
 
-            // Edge crosses the boundary -> add intersection point
+            //edge crosses the boundary to add intersection point
             if ((d1 < 0 && d2 > 0) || (d1 > 0 && d2 < 0)) {
                 float t = d1 / (d1 - d2);
                 result.Add(Vector3.Lerp(curr, next, t));
@@ -650,14 +619,50 @@ public class MissionController : MonoBehaviour {
         return result;
     }
 
+    //lists all json files in Missions folder
     public List<string> GetAllMissions() {
-        //list all json files in Missions folder
         string folder = Path.Combine(Application.persistentDataPath, "Missions");
         Directory.CreateDirectory(folder);
         string[] files = Directory.GetFiles(folder, "*.json");
         List<string> missions = new List<string>(files);
         return missions;
     }
+
+    //pushes state of current waypoint into stack
+    private void PushChanges() {
+        List<GameObject> wps = generator.GetMissionWaypoints();
+        wps.Sort((a, b) => MissionGenerator.GetWaypointIdx(a).CompareTo(MissionGenerator.GetWaypointIdx(b)));
+
+        List<(Vector3, int, Vector3)> snapWps = new List<(Vector3, int, Vector3)>();
+        foreach (GameObject wp in wps) {
+            var data = generator.GetWaypointData(wp);
+            snapWps.Add((wp.transform.position, data.level, data.normal));
+        }
+
+        undoStack.Push(new UndoChanges {
+            waypoints = snapWps,
+            footprint = new List<Vector3>(currFootprint)
+        });
+    }
+
+    //restores last state of waypoints and footprint from stack
+    public void Undo() {
+        if (undoStack.Count == 0) {
+            Toast.call.Show("Nothing to undo!", 2f, false);
+            return;
+        }
+
+        UndoChanges last = undoStack.Pop();
+        generator.ClearPath();
+        currFootprint = last.footprint;
+
+        List<Vector3> positions = last.waypoints.ConvertAll(w => w.pos);
+        List<Vector3> normals = last.waypoints.ConvertAll(w => w.normal);
+        List<int> levels = last.waypoints.ConvertAll(w => w.level);
+        generator.VisualizePath(positions, normals, levels);
+        Toast.call.Show("Undoing changes", 2f, false);
+    }
+
 
     public List<GameObject> GetMissionWaypoints() {
         return generator.GetMissionWaypoints();
@@ -761,6 +766,11 @@ public class MissionController : MonoBehaviour {
         return generator.heightOverlap;
     }
 
+    public float GetCurrentBuildingHeight() {
+        return currbuildingHeight;
+    }
+
+    //set building and footprint for mission generation
     public void SetBuilding(GameObject building, List<Vector3> footprint) {
         currBuilding = building;
         currFootprint = new List<Vector3>(footprint);
@@ -777,6 +787,10 @@ public class MissionController : MonoBehaviour {
         Regenerate();
     }
 
+    public void SetCurrentBuildingHeight(float height) {
+        currbuildingHeight = height;
+    }
+
     public void SetSnakeMode(bool value) {
         snakeMode = value;
     }
@@ -791,10 +805,7 @@ public class MissionController : MonoBehaviour {
         if (!settings.isWaypointMission) {
             return navigator.IsMissionRunning();
         } else {
-            //TODO implement for waypoint mission
             return false;
         }
     }
-
-
 }

@@ -1,9 +1,19 @@
+// ============================================================
+// MissionGenerator.cs
+//
+// Author: Václav Sovák
+// Date: 2026-03-05
+// 
+// Generates scan flight paths around a
+// building. Builds an orbit ring from the footprint,
+// resolves collisions, and provides vertical or horizontal trajectory.
+// ============================================================
+
 using System.Collections.Generic;
 using UnityEngine;
 using Esri.ArcGISMapsSDK.Components;
 using Esri.GameEngine.Geometry;
 using System.Linq;
-//using UnityEditor.VersionControl;
 
 [System.Serializable]
 public class GPSWaypoint {
@@ -73,15 +83,15 @@ public class MissionGenerator : MonoBehaviour {
     private int layerMission;
     private int layerBuildings;
     private LineRenderer lineRenderer;
-    //public List<GameObject> spawnedObjects = new List<GameObject>();
-    //public Dictionary<GameObject, List<GameObject>> tubeMap = new Dictionary<GameObject, List<GameObject>>();
-    //public Dictionary<GameObject, int> waypointLevel = new Dictionary<GameObject, int>();
+    //normals paralel to each waypoint
     private List<Vector3> helixNormals = new List<Vector3>();
-    public Vector3 lastcentroid = Vector3.zero;
-
+    //last center of selected building
+    public Vector3 lastCentroid = Vector3.zero;
+    //metadata for waypoints in trajectory
     public Dictionary<GameObject, WaypointData> waypoints = new Dictionary<GameObject, WaypointData>();
 
     void Awake() {
+        //cache layers and material on start
         layerMission = LayerMask.NameToLayer("Mission");
         layerBuildings = LayerMask.NameToLayer("Buildings");
 
@@ -108,6 +118,7 @@ public class MissionGenerator : MonoBehaviour {
         tubeMaterial.SetFloat("_Smoothness", 0.5f);
     }
 
+    //main function to generate scan path around the given building
     public List<Vector3> GenerateScanPath(GameObject buildingObj, List<Vector3> footprintPoints) {
         //reset previous mission
         RecalculateSteps();
@@ -117,7 +128,7 @@ public class MissionGenerator : MonoBehaviour {
         if (buildingObj == null || footprintPoints == null || footprintPoints.Count < 3)
             return new List<Vector3>();
 
-        //inflate bounds a bit
+        //inflate bounds
         Bounds bounds = buildingObj.GetComponent<Collider>().bounds;
         float startY = bounds.min.y + 2.0f;
         float endY = bounds.max.y + 1.0f;
@@ -125,9 +136,12 @@ public class MissionGenerator : MonoBehaviour {
         //orbital ring generation
         //prepare centroid
         Vector3 centroid = GetCentroid(footprintPoints);
-        lastcentroid = centroid;
+        lastCentroid = centroid;
 
+        //initial offset ring pushed outward by scan distance
         (List<Vector3> orbitRing, List<Vector3> orbitNormal) = GenerateOrbitRing(footprintPoints, centroid);
+
+        //rotate ring so that closest point to camera is first
         StartToCamera(ref orbitRing, ref orbitNormal, centroid);
 
         if (missionType == MissionType.Vertical) {
@@ -143,6 +157,7 @@ public class MissionGenerator : MonoBehaviour {
         return new List<Vector3>();
     }
 
+    //calculates center of the building footprint
     private Vector3 GetCentroid(List<Vector3> footprint) {
         Vector3 centroid = Vector3.zero;
         foreach (var p in footprint)
@@ -152,10 +167,12 @@ public class MissionGenerator : MonoBehaviour {
         return centroid;
     }
 
+    //generates orbit ring around the building footprint
     private (List<Vector3> ring, List<Vector3> normals) GenerateOrbitRing(List<Vector3> footprint, Vector3 centroid) {
         List<Vector3> orbitRing = new List<Vector3>();
         List<Vector3> orbitNormal = new List<Vector3>();
 
+        //remove vertices that are too close together
         float minEdgeLen = Mathf.Max(photoInterval * 0.5f, 0.15f);
         List<Vector3> cleanFootprint = new List<Vector3>();
         for (int i = 0; i < footprint.Count; i++) {
@@ -168,6 +185,7 @@ public class MissionGenerator : MonoBehaviour {
                     cleanFootprint.Add(p);
             }
         }
+        //remove duplicate last point witgh first if too close
         if (cleanFootprint.Count > 1 &&
             Vector3.Distance(cleanFootprint[cleanFootprint.Count - 1], cleanFootprint[0]) < minEdgeLen)
             cleanFootprint.RemoveAt(cleanFootprint.Count - 1);
@@ -177,6 +195,8 @@ public class MissionGenerator : MonoBehaviour {
 
         footprint = cleanFootprint;
 
+        //determine winding order with shoelace formula
+        //shoelace formula inspired by https://web.archive.org/web/20240418082212/https://stackoverflow.com/questions/1165647/how-to-determine-if-a-list-of-polygon-points-are-in-clockwise-order/1165943#1165943
         float signedAreaPre = 0f;
         for (int fi = 0; fi < footprint.Count; fi++) {
             Vector3 fa = footprint[fi];
@@ -187,7 +207,7 @@ public class MissionGenerator : MonoBehaviour {
         }
         bool clockW = (signedAreaPre > 0f);
 
-        //recopy the footprint with point of max seglen apart
+        //subdivide edges to match maxsegment length
         List<Vector3> sepFootprint = new List<Vector3>();
         for (int i = 0; i < footprint.Count; i++) {
             Vector3 p1 = footprint[i];
@@ -228,6 +248,7 @@ public class MissionGenerator : MonoBehaviour {
                 for (int j = 1; j < steps; j++) {
                     Vector3 vert = Vector3.Lerp(p1, p2, (float) j / steps);
 
+                    //skip vertices that are too close to concave corners
                     if (p1IsConcave && Vector3.Distance(vert, p1) < scanDistance)
                         continue;
                     if (p2IsConcave && Vector3.Distance(vert, p2) < scanDistance)
@@ -238,17 +259,7 @@ public class MissionGenerator : MonoBehaviour {
             }
         }
 
-        /*
-        float signedArea = 0f;
-        for (int i = 0; i < sepFootprint.Count; i++) {
-            Vector3 a = sepFootprint[i];
-            Vector3 b = sepFootprint[(i + 1) % sepFootprint.Count];
-            signedArea += (a.x * b.z) - (b.x * a.z);
-        }
-
-        bool isCCW = (signedArea > 0f);
-        */
-
+        //calculate offset points for each vertex of subdivided ring
         for (int i = 0; i < sepFootprint.Count; i++) {
             Vector3 curr = sepFootprint[i];
             Vector3 prev = sepFootprint[(i - 1 + sepFootprint.Count) % sepFootprint.Count];
@@ -258,26 +269,20 @@ public class MissionGenerator : MonoBehaviour {
             Vector3 dirPrev = (curr - prev).normalized;
             Vector3 dirNext = (next - curr).normalized;
 
+            //normals pointing outward from the building depending on winding order
             Vector3 normPrev = clockW ? new Vector3(dirPrev.z, 0, -dirPrev.x) : new Vector3(-dirPrev.z, 0, dirPrev.x);
             Vector3 normNext = clockW ? new Vector3(dirNext.z, 0, -dirNext.x) : new Vector3(-dirNext.z, 0, dirNext.x);
 
-            /*
-            //average normal for the vertex
-            Vector3 vertexNormal = (normPrev + normNext).normalized;
-            if (vertexNormal == Vector3.zero)
-                vertexNormal = normPrev;
-
-            //move the offset of scandist
-            Vector3 offsetPoint = curr + (vertexNormal * scanDistance);
-            */
-
+            //miter vector to pushoutward and respect corners
+            //inspired by https://stackoverflow.com/a/54042831
             Vector3 miterSum = normPrev + normNext;
             float miterMag = miterSum.magnitude;
             Vector3 offsetPoint;
             if (miterMag < 0.001f) {
-                //to concave corner
+                //straight edge use one normal
                 offsetPoint = curr + normPrev * scanDistance;
             } else {
+                //calculate proper offset for sharp corners
                 float miterDist = (2.0f * scanDistance) / miterMag;
                 miterDist = Mathf.Min(miterDist, scanDistance * 2.0f); //convex limit for sharp corners
                 offsetPoint = curr + miterSum.normalized * miterDist;
@@ -294,8 +299,8 @@ public class MissionGenerator : MonoBehaviour {
         return (orbitRing, orbitNormal);
     }
 
+    //generates horizontal trajectory
     private List<Vector3> GenerateHorizontal(List<Vector3> orbitRing, List<Vector3> orbitNormal, Vector3 centroid, float startY, float endY) {
-        //horizontal level generation
         List<Vector3> finalPath = new List<Vector3>();
         List<int> finalPathLevels = new List<int>();
         Vector3 lastPoint = Vector3.zero;
@@ -311,9 +316,10 @@ public class MissionGenerator : MonoBehaviour {
                 Vector3 noCollisionPos = SolveCollision(propPos, pushDir);
 
                 if (!isFirst && Vector3.Distance(lastPoint, noCollisionPos) < 0.2f)
-                    continue;
+                    continue; //skip duplicate points
 
                 if (!isFirst) {
+                    //solve sight collision by inserting bridge points
                     List<Vector3> sightPoints = SolveSightline(lastPoint, noCollisionPos, pushDir);
                     finalPath.AddRange(sightPoints);
                     for (int j = 0; j < sightPoints.Count; j++) {
@@ -330,7 +336,7 @@ public class MissionGenerator : MonoBehaviour {
                 }
             }
 
-            //build columns
+            //build vertical climbs between levels
             float nextY = currentY + verticalStep;
             if (nextY <= endY && finalPath.Count > 0) {
                 //on the last orbit point
@@ -354,8 +360,8 @@ public class MissionGenerator : MonoBehaviour {
         return finalPath;
     }
 
+    //rotate list so that the first point is closest to the camera
     private void StartToCamera(ref List<Vector3> orbitRing, ref List<Vector3> orbitNormal, Vector3 centroid) {
-        //rotate points so that closest to cam is first
         if (arcGISCamera != null) {
             Vector3 centroidFlat = new Vector3(centroid.x, 0, centroid.z);
             Vector3 camFlat = new Vector3(arcGISCamera.transform.position.x, 0, arcGISCamera.transform.position.z);
@@ -376,6 +382,7 @@ public class MissionGenerator : MonoBehaviour {
         }
     }
 
+    //generates vertical trajectory
     private List<Vector3> GenerateVertical(List<Vector3> orbitRing, List<Vector3> orbitNormal, Vector3 centroid, float startY, float endY) {
         List<Vector3> finalPath = new List<Vector3>();
         Vector3 lastPoint = Vector3.zero;
@@ -386,7 +393,7 @@ public class MissionGenerator : MonoBehaviour {
             int normalIdx = Mathf.Min(i, orbitNormal.Count - 1);
             Vector3 pt = orbitRing[i];
 
-            //determine col direction
+            //two endpoint of each column, bottom to top or top to bottom
             List<float> colY = new List<float>();
             if (goingUp) {
                 colY.Add(startY);
@@ -427,6 +434,7 @@ public class MissionGenerator : MonoBehaviour {
         return finalPath;
     }
 
+    //solves collision by pushing outwards or finding safe altitude
     private Vector3 SolveCollision(Vector3 targetpos, Vector3 pushDir) {
         Vector3 curr = targetpos;
         float pushed = 0.0f;
@@ -447,6 +455,7 @@ public class MissionGenerator : MonoBehaviour {
         return curr;
     }
 
+    //finds safe altitude above the point by raycasting from the sky
     private Vector3 FindSafeAlt(Vector3 pos) {
         Vector3 sky = new Vector3(pos.x, pos.y + 100.0f, pos.z);
         RaycastHit hit;
@@ -464,6 +473,7 @@ public class MissionGenerator : MonoBehaviour {
         return pos;
     }
 
+    //finds the highest safe point between two points
     private float GetHighestAlt(Vector3 prevPoint, Vector3 currPoint) {
         //save currently highest point
         float highest = Mathf.Max(prevPoint.y, currPoint.y);
@@ -486,6 +496,7 @@ public class MissionGenerator : MonoBehaviour {
         return highest;
     }
 
+    //checks if the position is blocked by any colliders or hidden under cast from sky
     private bool IsPosBlocked(Vector3 pos) {
         //checks if any objects are too close
         if (Physics.CheckSphere(pos, droneRadius, collisionLayer)) {
@@ -501,6 +512,7 @@ public class MissionGenerator : MonoBehaviour {
         return false;
     }
 
+    //solves sight line between two points
     public List<Vector3> SolveSightline(Vector3 prevPoint, Vector3 currPoint, Vector3 pushDir) {
         List<Vector3> segPoints = new List<Vector3>();
         RaycastHit hit;
@@ -533,6 +545,7 @@ public class MissionGenerator : MonoBehaviour {
         return segPoints;
     }
 
+    //reconnects the level path in snake pattern
     public void ReconnectLevelPath(List<GameObject> remaining) {
         Debug.LogWarning("Running level reconnect");
         if (remaining == null || remaining.Count == 0)
@@ -602,6 +615,7 @@ public class MissionGenerator : MonoBehaviour {
         }
     }
 
+    //converts unity world coordinates to GPS waypoints
     public List<GPSWaypoint> ConvertToGPSCoordinates(List<Vector3> unityPath, List<Vector3> normals) {
         List<GPSWaypoint> gpsPath = new List<GPSWaypoint>();
 
@@ -632,8 +646,8 @@ public class MissionGenerator : MonoBehaviour {
                 if (heading < 0)
                     heading += 360;
                 wp.heading = heading;
-            } else if (lastcentroid != Vector3.zero) {
-                Vector3 dir = (unityPath[i] - lastcentroid);
+            } else if (lastCentroid != Vector3.zero) {
+                Vector3 dir = (unityPath[i] - lastCentroid);
                 dir.y = 0;
                 dir.Normalize();
                 float heading = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
@@ -648,6 +662,7 @@ public class MissionGenerator : MonoBehaviour {
         return gpsPath;
     }
 
+    //creates all waypoints and tubes gameobjects into visible form
     public void VisualizePath(List<Vector3> path, List<Vector3> normals = null, List<int> levelData = null) {
         if (path.Count == 0)
             return;
@@ -685,7 +700,8 @@ public class MissionGenerator : MonoBehaviour {
             if (normals != null && i < normals.Count)
                 data.normal = normals[i];
             else {
-                Vector3 fall = currentPos - lastcentroid;
+                //fallback for missing normals, calculate from centroid
+                Vector3 fall = currentPos - lastCentroid;
                 fall.y = 0;
                 if (fall.sqrMagnitude > 0.001f)
                     data.normal = fall.normalized;
@@ -705,6 +721,7 @@ public class MissionGenerator : MonoBehaviour {
         }
     }
 
+    //instantiates waypoint prefab and set parameters
     private GameObject CreateWaypoint(Vector3 pos, int index, int pathCount, int level = 0) {
         GameObject wpObj = null;
 
@@ -744,10 +761,10 @@ public class MissionGenerator : MonoBehaviour {
             wpObj.transform.localScale = Vector3.one * waypointSize * 1.5f;
         }
 
-        //waypointLevel[wpObj] = level;
         return wpObj;
     }
 
+    //creates tube segment between two points
     private GameObject CreateTube(Vector3 start, Vector3 end, int index) {
         GameObject tube = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         tube.name = "Tube_Segment_" + index;
@@ -776,8 +793,8 @@ public class MissionGenerator : MonoBehaviour {
         return tube;
     }
 
+    //creates tube between two wps, adds to map
     public void AddTube(GameObject wp1, GameObject wp2) {
-        //creates tube between two wps, adds to map
         GameObject tube = CreateTube(wp1.transform.position, wp2.transform.position, -1);
         if (!waypoints.ContainsKey(wp1))
             waypoints[wp1] = new WaypointData();
@@ -788,6 +805,7 @@ public class MissionGenerator : MonoBehaviour {
         waypoints[wp2].tubes.Add(tube);
     }
 
+    //overload, creates tube between explicit positions
     public void AddTube(GameObject wp1, GameObject wp2, Vector3 from, Vector3 to) {
         GameObject tube = CreateTube(from, to, -1);
         if (!waypoints.ContainsKey(wp1))
@@ -803,36 +821,39 @@ public class MissionGenerator : MonoBehaviour {
         lineRenderer.SetPositions(positions.ToArray());
     }
 
+    //calculates percentage of camera coverage horizontally
     public float CalculateWidthCoverage() {
-        //percentage of camera coverage horizontally
+
         float view = (scanDistance * senzWidth) / focalLength;
         float cov = (view - photoInterval) / view;
         return cov * 100.0f;
     }
 
+    //calculates percentage of camera coverage vertically
     public float CalculateHeightCoverage() {
-        //percentage of camera coverage vertically
         float view = (scanDistance * senzHeight) / focalLength;
         float cov = (view - verticalStep) / view;
         return cov * 100.0f;
     }
 
+    //calculates distance between photos
     public float CalculatePhotoDistance(float targetOverlap = 0.8f) {
-        //percentage width of camera to shoot new photo
         float viewWidth = (scanDistance * senzWidth) / focalLength;
         return viewWidth * (1f - targetOverlap);
     }
 
+    //recalculates photo interval and vertical step based on current parameters
+    //inspired by https://support.pix4d.com/hc/en-us/articles/202557469
     public void RecalculateSteps() {
         float footprintH = scanDistance * (senzHeight / focalLength);
         float footprintW = scanDistance * (senzWidth / focalLength);
         verticalStep = Mathf.Max(footprintH * (1f - heightOverlap), 0.3f);
-        photoInterval = Mathf.Max(footprintW * (1f - widthOverlap), 0.5f);
+        photoInterval = Mathf.Max(footprintW * (1f - widthOverlap), 0.3f);
         //maxSegmentLen = photoInterval;
     }
 
+    //destroys all waypoints and tubes, clears the dictionary
     public void ClearPath() {
-        //clearing all mission variables/objects
         HashSet<GameObject> all = new HashSet<GameObject>();
         foreach (var wp in waypoints) {
             if (wp.Key != null)
@@ -848,6 +869,7 @@ public class MissionGenerator : MonoBehaviour {
         waypoints.Clear();
     }
 
+    //destroys tubes between given waypoints
     public void RemoveTubes(List<GameObject> waypoints, List<GameObject> rem = null) {
         HashSet<GameObject> tubs = new HashSet<GameObject>();
 
@@ -873,6 +895,7 @@ public class MissionGenerator : MonoBehaviour {
         }
     }
 
+    //destroys given waypoints and their tubes, removes from dictionary
     public void RemoveWaypoint(List<GameObject> waypoints) {
         foreach (GameObject wp in waypoints) {
             if (wp == null)
@@ -887,6 +910,7 @@ public class MissionGenerator : MonoBehaviour {
         return waypoints.Count > 0;
     }
 
+    //returns list of current mission waypoints
     public List<GameObject> GetMissionWaypoints() {
         List<GameObject> waypoints = new List<GameObject>();
         foreach (GameObject wp in this.waypoints.Keys) {
@@ -895,6 +919,7 @@ public class MissionGenerator : MonoBehaviour {
         return waypoints;
     }
 
+    //calculates center of mission from given points
     public Vector3 GetMissionCenter(List<Vector3> points) {
         if (points == null || points.Count == 0)
             return Vector3.zero;
@@ -908,18 +933,21 @@ public class MissionGenerator : MonoBehaviour {
         return sum / count;
     }
 
+    //returns list of tubes connected to the waypoint
     public List<GameObject> GetWaypointTubes(GameObject wp) {
         if (waypoints.ContainsKey(wp))
             return waypoints[wp].tubes;
         return new List<GameObject>();
     }
 
+    //returns the level of the waypoint for horizontal missions
     public int GetWaypointLevel(GameObject wp) {
         if (waypoints.ContainsKey(wp))
             return waypoints[wp].level;
         return 0;
     }
 
+    //returns the normal of the waypoint
     public Vector3 GetNormal(int idx) {
         foreach (var wp in waypoints)
             if (GetWaypointIdx(wp.Key) == idx)
@@ -927,18 +955,27 @@ public class MissionGenerator : MonoBehaviour {
         return Vector3.zero;
     }
 
+    //parses the index of the waypoint from its name
     public static int GetWaypointIdx(GameObject wp) {
         int.TryParse(wp.name.Replace("WP_", ""), out int idx);
         return idx;
     }
 
+    //returns the WaypointData of the waypoint
+    public WaypointData GetWaypointData(GameObject wp) {
+        if (waypoints.ContainsKey(wp))
+            return waypoints[wp];
+        return new WaypointData();
+    }
+
+    //returns list of normals in the order of given waypoints
     public List<Vector3> GetNormalsOrdered(List<GameObject> ordered) {
         List<Vector3> norms = new List<Vector3>(ordered.Count);
         foreach (GameObject wp in ordered) {
             if (waypoints.ContainsKey(wp)) {
                 norms.Add(waypoints[wp].normal);
             } else if (wp != null) {
-                Vector3 fall = wp.transform.position - lastcentroid;
+                Vector3 fall = wp.transform.position - lastCentroid;
                 fall.y = 0f;
                 if (fall.sqrMagnitude > 0.001f)
                     norms.Add(fall.normalized);
@@ -950,6 +987,7 @@ public class MissionGenerator : MonoBehaviour {
         return norms;
     }
 
+    //calculates outward normals for the given footprint
     public List<Vector3> GetMissionNormals(List<Vector3> points, Vector3 center) {
         List<Vector3> normals = new List<Vector3>();
         if (points == null || points.Count == 0)
@@ -981,6 +1019,7 @@ public class MissionGenerator : MonoBehaviour {
         return normals;
     }
 
+    //rotates list by offset
     private List<T> RotateList<T>(List<T> list, int offset) {
         if (offset == 0 || list.Count == 0)
             return list;

@@ -1,3 +1,12 @@
+// ============================================================
+// HandleArrows.cs
+// 
+// Author: Václav Sovák
+// Date: 2026-04-05
+// 
+// Creates drag arrows for manipulating a waypoint in scene.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -11,24 +20,29 @@ public class HandleArrows : MonoBehaviour {
     private GameObject xArrow;
     private GameObject yArrow;
     private GameObject zArrow;
+
+    //renderers for the emission
     private Renderer[] xgrafic;
     private Renderer[] ygrafic;
     private Renderer[] zgrafic;
 
     private Camera cam;
-    private ArrowType? draggingArrow;
+    private Plane plane;    //plane for dragging the arrows
+    public Transform wp;    //waypoint the arrows are manipulating
     private Vector3 startPos;
-    private Plane plane;
-    public Transform wp;
+    private ArrowType? draggingArrow;
     public MissionEditor missioneditor;
     public float screensize = 0.1f;
     public bool dragging => draggingArrow != null;
 
     void Start() {
         cam = Camera.main;
+        //create arrows in 3 axes
         xArrow = CreateArrow(Vector3.right, Color.red);
         yArrow = CreateArrow(Vector3.up, Color.green);
         zArrow = CreateArrow(Vector3.forward, Color.blue);
+
+        //init renderers for emission
         xgrafic = xArrow.GetComponentsInChildren<Renderer>();
         ygrafic = yArrow.GetComponentsInChildren<Renderer>();
         zgrafic = zArrow.GetComponentsInChildren<Renderer>();
@@ -36,6 +50,7 @@ public class HandleArrows : MonoBehaviour {
 
     void Update() {
 
+        //detect which arrow is clicked
         if (Input.GetMouseButtonDown(0)) {
             Ray r = cam.ScreenPointToRay(Input.mousePosition);
             RaycastHit hit;
@@ -51,27 +66,30 @@ public class HandleArrows : MonoBehaviour {
 
         }
 
+        //continue drag on holding mouse
         if (Input.GetMouseButton(0) && draggingArrow != null) {
             UpdateDragging();
         }
 
+        //stop drag
         if (Input.GetMouseButtonUp(0)) {
             draggingArrow = null;
         }
     }
 
+    //creates an arrow pointing in axis direction
     public GameObject CreateArrow(Vector3 looksAt, Color color) {
         GameObject arrow = new GameObject("Arrow");
         arrow.transform.parent = transform;
         arrow.transform.localPosition = Vector3.zero;
 
-        //body of the arrow
+        //body of the arrow as simple cylinder
         GameObject stick = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         stick.transform.parent = arrow.transform;
         stick.transform.localPosition = looksAt * 0.5f;
         stick.transform.localScale = new Vector3(0.05f, 0.5f, 0.1f);
 
-        //tip of the arrow
+        //tip of the arrow as a cone
         GameObject cone = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         MeshFilter mr = cone.GetComponent<MeshFilter>();
         Mesh mesh = new Mesh();
@@ -81,7 +99,7 @@ public class HandleArrows : MonoBehaviour {
         cone.transform.localPosition = looksAt * 1f;
         cone.transform.localScale = new Vector3(0.25f, 0.25f, 0.25f);
 
-        //details of the cone 
+        //cone geometry
         int segments = 7;
         float angle = 0.0f;
         float angleAmout = 2 * Mathf.PI / segments;
@@ -103,7 +121,7 @@ public class HandleArrows : MonoBehaviour {
             angle -= angleAmout;
         }
 
-        //roteate cone to look at direction
+        //rotate cone to look at direction
         Quaternion rotation = Quaternion.identity;
         if (looksAt == Vector3.right) {
             rotation = Quaternion.Euler(0, 0, -90);
@@ -177,6 +195,7 @@ public class HandleArrows : MonoBehaviour {
         return arrow;
     }
 
+    //init the drag move of the arrows
     private void Dragging(ArrowType type) {
         ResetHighlight(xgrafic);
         ResetHighlight(ygrafic);
@@ -185,6 +204,7 @@ public class HandleArrows : MonoBehaviour {
         draggingArrow = type;
         startPos = transform.position;
 
+        //determine plane for dragging based on arrow type
         Vector3 dragplane;
         if (type == ArrowType.X) {
             dragplane = Vector3.up;
@@ -199,16 +219,18 @@ public class HandleArrows : MonoBehaviour {
 
         plane = new Plane(dragplane, transform.position);
 
+        //init drag in mission editor
         if (missioneditor != null) {
             missioneditor.InitDragArr(wp.GetComponent<WaypointSelect>());
         }
     }
 
+    //updates the position of arrows and the waypoint
     private void UpdateDragging() {
         Ray r = cam.ScreenPointToRay(Input.mousePosition);
         float dist;
 
-        //if ray hits plane we move the arrow
+        //move arrow when plane is hit
         if (plane.Raycast(r, out dist)) {
             Vector3 hitplace = r.GetPoint(dist);
             Vector3 diff = hitplace - startPos;
@@ -241,16 +263,16 @@ public class HandleArrows : MonoBehaviour {
         transform.localScale = Vector3.one * newScale;
     }
 
+    //resets glow effect
     private void ResetHighlight(Renderer[] grafics) {
-        //reset glow effect
         foreach (Renderer r in grafics) {
             Material mat = r.material;
             mat.DisableKeyword("_EMISSION");
         }
     }
 
+    //sets up glow effect
     private void SetHighlight(Renderer[] grafics, Color color) {
-        //set up glow effect
         foreach (Renderer g in grafics) {
             Material mat = g.material;
             mat.EnableKeyword("_EMISSION");

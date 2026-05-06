@@ -1,3 +1,14 @@
+// ============================================================
+// ColumnGizmo.cs
+//
+// Author:  Václav Sovák
+// Date:    2026-04-05
+//
+// Gizmo for moving a vertical column of waypoints.
+// Created on waypoint click. Moves all waypoints in the 
+// column together.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
@@ -6,17 +17,18 @@ using UnityEngine.UIElements;
 
 public class ColumnGizmo : Singleton<ColumnGizmo> {
     private Camera cam;
-    public float screensize = 0.05f;
+    public float screenSize = 0.05f;    //gizmo size on screen
     private GameObject groundArrowsContainer;
 
     enum ArrowType {
-        Y, XZ_PLANE
+        Y,          //vertical movement 
+        XZ_PLANE    //movement in xz
     };
 
-    private GameObject xzDisk;
-    private GameObject yArrow;
+    private GameObject xzDisk;  //disk for dragging horizontally
+    private GameObject yArrow;  //arrow for dragging vertically
     private Renderer[] diskGraphic;
-    private Renderer[] ygrafic;
+    private Renderer[] yGraphic;
 
     private GameObject colUp;
     private GameObject colDown;
@@ -30,7 +42,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
     public Transform wp;
     private List<WaypointSelect> waypointsCol = new List<WaypointSelect>();
     public bool dragging => draggingArrow != null;
-    private bool created = false;
+    private bool created = false;   //prevents click through when creating
     private int missionLayer;
     private LayerMask missionMask;
     private LayerMask gndMask;
@@ -39,6 +51,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
     private HandleArrows handleArrows;
 
     void Start() {
+        //initialize layers and shaders on start
         cam = Camera.main;
         missionLayer = LayerMask.NameToLayer("Mission");
         missionMask = LayerMask.GetMask("Mission");
@@ -48,7 +61,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
     }
 
     void Update() {
-        //decide which arrow we drag
+        //detect which arrow we drag
         if (Input.GetMouseButtonDown(0)) {
             if (created) {
                 created = false;
@@ -58,6 +71,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             Ray r = cam.ScreenPointToRay(Input.mousePosition);
             RaycastHit hit;
             if (Physics.Raycast(r, out hit, 1000f, missionMask)) {
+                //find objects in hierarchy
                 Transform trans = hit.transform;
                 while (trans != null) {
                     if (trans.gameObject == yArrow) {
@@ -85,6 +99,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         }
     }
 
+    //creates a ring for horizontal dragging
     private GameObject CreateRing(float radius, float thickness, int segments = 32) {
         GameObject ringCont = new GameObject("XZ_Ring");
         ringCont.layer = missionLayer;
@@ -93,6 +108,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         ringVis.transform.SetParent(ringCont.transform, false);
         ringVis.layer = missionLayer;
 
+        //prepare mesh data
         MeshFilter meshF = ringVis.AddComponent<MeshFilter>();
         MeshRenderer meshR = ringVis.AddComponent<MeshRenderer>();
 
@@ -103,7 +119,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         float inRad = radius - thickness * 0.5f;
         float outRad = radius + thickness * 0.5f;
 
-        //verts of two circles
+        //create inside and outside vertex ring
         for (int i = 0; i <= segments; i++) {
             float radians = (float) i / segments * Mathf.PI * 2f;
             float cosAngle = Mathf.Cos(radians);
@@ -133,15 +149,14 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         ringMesh.vertices = verts.ToArray();
         ringMesh.triangles = tris.ToArray();
         ringMesh.RecalculateNormals();
-
         meshF.mesh = ringMesh;
 
         Material ringMaterial = new Material(shader);
         ringMaterial.color = new Color(0f, 1f, 1f, 1f);
         ringMaterial.SetInt("_Cull", 0);
-
         meshR.material = ringMaterial;
 
+        //add collider for click detection
         BoxCollider clickCollider = ringCont.AddComponent<BoxCollider>();
         clickCollider.center = Vector3.zero;
         clickCollider.size = new Vector3(outRad * 2f, 0.2f, outRad * 2f);
@@ -149,6 +164,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         return ringCont;
     }
 
+    //creates column of connected waypoints 
     public void CreateCol(WaypointSelect clickedWp) {
         DestroyCol();
         wp = clickedWp.transform;
@@ -159,11 +175,11 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         colDown.name = "ColDown";
 
         Material mat = new Material(shader);
-        mat.color = new Color(1f, 0.5f, 0f);
+        mat.color = new Color(1f, 0.5f, 0f);    //orange cyl
         colUp.GetComponent<Renderer>().material = mat;
         colDown.GetComponent<Renderer>().material = mat;
 
-        //remove colliders cols will never be clicable
+        //remove colliders cols will never be clickable
         Destroy(colUp.GetComponent<Collider>());
         Destroy(colDown.GetComponent<Collider>());
 
@@ -174,6 +190,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         colDown.transform.localPosition = Vector3.zero;
         colDown.transform.localScale = new Vector3(0.1f, 1f, 0.06f);
 
+        //find all waypoints down and above the clicked waypoint
         RaycastHit[] hits = Physics.RaycastAll(clickedWp.transform.position, Vector3.down, 1000f, missionGndMask);
         RaycastHit[] hitsUp = Physics.RaycastAll(clickedWp.transform.position, Vector3.up, 1000f, missionMask);
 
@@ -185,6 +202,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             waypointsCol.Clear();
             waypointsCol.Add(clickedWp);
 
+            //get all below waypoints 
             foreach (RaycastHit hit in hits) {
                 if (lowestHit.point.y > hit.point.y) {
                     lowestHit = hit;
@@ -194,6 +212,8 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
                     waypointsCol.Add(wp);
                 }
             }
+
+            //get all above waypoints
             foreach (RaycastHit hit in hitsUp) {
                 WaypointSelect wp = hit.transform.GetComponent<WaypointSelect>();
                 if (wp != null && wp != clickedWp && hit.point.y > highestY) {
@@ -208,7 +228,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             //set pipe to the ground hit
             PosCylinder(colDown, lowestHit.point, clickedWp.transform.position);
 
-            //set the pipe to the sky
+            //set the pipe to the last up waypoint
             PosCylinder(colUp, clickedWp.transform.position, highestWp.transform.position);
 
             colDown.transform.parent = clickedWp.transform;
@@ -222,6 +242,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
                 //create xz drag
                 xzDisk = CreateRing(1.5f, 0.15f, 48);
 
+                //place gizmo at gnd hit
                 groundArrowsContainer = new GameObject("GroundArrows");
                 groundArrowsContainer.transform.position = lowestHit.point;
 
@@ -233,10 +254,10 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
                 xzDisk.transform.localScale = Vector3.one;
                 xzDisk.transform.localPosition = Vector3.zero;
 
-                ygrafic = yArrow.GetComponentsInChildren<Renderer>();
+                yGraphic = yArrow.GetComponentsInChildren<Renderer>();
                 diskGraphic = xzDisk.GetComponentsInChildren<Renderer>();
 
-                ShowCol(false); //only in drag
+                ShowCol(false); //only visible in drag
                 created = true;
             }
         }
@@ -247,9 +268,9 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             return;
 
         if (groundArrowsContainer != null) {
-            //update scale
+            //update scale from camera distance
             float camDist = Vector3.Distance(cam.transform.position, groundArrowsContainer.transform.position);
-            float scale = camDist * screensize;
+            float scale = camDist * screenSize;
             groundArrowsContainer.transform.localScale = Vector3.one * scale;
 
             //ring follow ground
@@ -267,22 +288,23 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         }
     }
 
+    //drags the column of waypoints on selected plane
     private void Dragging(ArrowType type) {
-        if (ygrafic != null)
-            ResetHighlight(ygrafic);
+        if (yGraphic != null)
+            ResetHighlight(yGraphic);
         if (diskGraphic != null)
             ResetHighlight(diskGraphic);
 
         draggingArrow = type;
         startPos = groundArrowsContainer.transform.position;
 
-        //on what plane to drag on
+        //set drag plane by arrow type
         Vector3 planeNormal;
         if (type == ArrowType.Y) {
-            planeNormal = Vector3.forward;
-            SetHighlight(ygrafic, Color.green);
+            planeNormal = Vector3.forward;  //vertical drag
+            SetHighlight(yGraphic, Color.green);
         } else {
-            planeNormal = Vector3.up;
+            planeNormal = Vector3.up;   //horizontal drag
             SetHighlight(diskGraphic, Color.cyan);
             ShowCol(true); //show col only in drag
         }
@@ -295,15 +317,16 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         }
     }
 
+    //updates column position while dragging
     private void UpdateDragging() {
         Ray r = cam.ScreenPointToRay(Input.mousePosition);
 
-        //if ray hits plane we move the arrow
+        //move gizmo when ray hits the plane
         if (plane.Raycast(r, out float dist)) {
             Vector3 hitplace = r.GetPoint(dist);
             Vector3 diff = hitplace - startPos;
 
-            //move arrow and waypoint
+            //move arrow and waypoints
             Vector3 offset = Vector3.zero;
             if (draggingArrow == ArrowType.Y) {
                 offset = new Vector3(0, diff.y, 0);
@@ -319,6 +342,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         }
     }
 
+    //recalculates column length after movement
     private void UpdateColLen() {
         if (colUp == null || colDown == null || wp == null || waypointsCol.Count == 0)
             return;
@@ -338,7 +362,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
 
         Vector3 lowPos = lowWp.transform.position;
 
-        //downcol update
+        //update lower pipe to gnd
         Ray downRay = new Ray(lowPos, Vector3.down);
         RaycastHit gndHit;
         if (Physics.Raycast(downRay, out gndHit, 1000f, missionGndMask)) {
@@ -349,7 +373,7 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
             colDown.transform.parent = lowWp.transform;
         }
 
-        //update upcol
+        //update upper pipe to highest wp
         if (highWp != lowWp) {
             highestWp = highWp;
             Vector3 highPos = highWp.transform.position; //copy of pos
@@ -363,12 +387,14 @@ public class ColumnGizmo : Singleton<ColumnGizmo> {
         }
     }
 
+    //recalculates pos between two points
     private void PosCylinder(GameObject cyl, Vector3 from, Vector3 to) {
         cyl.transform.position = (from + to) / 2f;
         cyl.transform.localScale = new Vector3(0.1f, Vector3.Distance(from, to) / 2f, 0.06f);
         cyl.transform.up = (to - from).normalized;
     }
 
+    //destroys the column and its components
     public void DestroyCol() {
         Destroy(colUp);
         Destroy(colDown);

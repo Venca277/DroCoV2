@@ -1,11 +1,22 @@
+// ============================================================
+// MissionWrappers.cs
+//
+// Author: Václav Sovák
+// Date: 2026-04-05
+//
+// Plain data classes used for JSON
+// serialization. Network messages, mission save files and
+// waypoint data.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Newtonsoft.Json;
 using System.IO;
-//using System.Windows.Input;
 using Esri.GameEngine.Geometry;
 
+//wrapper for sending mission data over network and saving/loading missions
 public class NetworkWrapper {
     public string type;
     public MissionData data;
@@ -20,6 +31,7 @@ public class BuildingInfo {
     public string name;
     public float minY;
     public float maxY;
+    public float buildingHeight;
     public List<GpsCorner> footprint;
 }
 
@@ -33,6 +45,7 @@ public class ControlCommand {
     public ControlCommandData data;
 }
 
+//wrapper for virtual mission navigation
 public class ControlCommandData {
     public float pitch;
     public float roll;
@@ -41,6 +54,7 @@ public class ControlCommandData {
     public float gimbal_pitch;
 }
 
+//wrapper for each waypoint
 public class WaypointData {
     public List<GameObject> tubes = new List<GameObject>();
     public int level = 0;
