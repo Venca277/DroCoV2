@@ -1,3 +1,15 @@
+// ============================================================
+// BuildingFetcher.cs
+// 
+// Author:  Václav Sovák
+// Date:    2026-04-05
+//
+// Handle double click selection of buildings, fetches building
+// data using Overpass API, reconstructs building model and
+// preloads surrounding area.
+//
+// ============================================================
+
 using System.Collections.Generic;
 using System.Globalization;
 using Esri.ArcGISMapsSDK.Components;
@@ -14,8 +26,10 @@ public class BuildingFetcher : MonoBehaviour {
     public ArcGISMapComponent map;
     public MissionGenerator missionGenerator;
     public MissionController missionController;
+    public BuildingHover buildingHover;
     public Settings settings;
     public bool showGhost = true;
+    public bool showHighlight = false;
 
     private float lastClick = 0f;
     private float doubleClickTime = 0.25f;
@@ -43,19 +57,21 @@ public class BuildingFetcher : MonoBehaviour {
             shader = Shader.Find("Universal Render Pipeline/UnLit");
         }
 
+        //initialize material used for building reconstruction on start
         buildingMat = new Material(shader);
-        buildingMat.SetColor("_BaseColor", new Color(0f, 0f, 1f, 1f));
+        buildingMat.SetColor("_BaseColor", new Color(0f, 0f, 1f, 1f));  //solid blue
         buildingMat.SetFloat("_Smoothness", 0.0f);
         buildingMat.SetFloat("_Surface", 0);
         buildingMat.SetFloat("_ZWrite", 1);
         buildingMat.SetFloat("_Cull", (float) UnityEngine.Rendering.CullMode.Off);
         buildingMat.SetInt("_ZTest", (int) UnityEngine.Rendering.CompareFunction.LessEqual);
 
+        //initialize material used for floor highlight on start
         floorMat = new Material(shader);
-        floorMat.SetColor("_BaseColor", new Color(0f, 1f, 0f, 0.05f));
+        floorMat.SetColor("_BaseColor", new Color(0f, 1f, 0f, 0.05f));      //transparent green
         floorMat.SetFloat("_Smoothness", 0.0f);
         floorMat.EnableKeyword("_EMISSION");
-        floorMat.SetColor("_EmissionColor", new Color(0f, 1f, 0f) * 0.5f);
+        floorMat.SetColor("_EmissionColor", new Color(0f, 1f, 0f) * 0.5f);  //enable emission
         floorMat.SetFloat("_Surface", 1);
         floorMat.SetFloat("_Blend", 0);
         floorMat.SetInt("_SrcBlend", (int) UnityEngine.Rendering.BlendMode.One);
@@ -95,17 +111,23 @@ public class BuildingFetcher : MonoBehaviour {
                 }
             }
 
+            //user selected preloaded building with buildingTag
             if (foundLoaded != null) {
-                ClearSelection();
+                ClearSelection();   //clear previous selection and select current object
                 currentSelection = foundLoaded.gameObject;
                 buildingWorldPoints = foundLoaded.WorldPoints;
+
+                //enable visible ghost
                 MeshRenderer render = currentSelection.GetComponent<MeshRenderer>();
                 if (render != null)
                     render.enabled = showGhost;
 
+                //add floor highlight and generate and prepare mission
                 FloorSelect(currentSelection, currentSelection.GetComponent<MeshFilter>().mesh, currentSelection.GetComponent<MeshFilter>().mesh.bounds.min.y);
+                buildingHover.selected = currentSelection;
+                float height = GetHeight(foundLoaded.BuildingData);
                 missionController.PrepareMission(currentSelection, buildingWorldPoints);
-                MissionUI.Instance?.SetNewMission(currentSelection, buildingWorldPoints);
+                MissionUI.Instance?.SetNewMission(currentSelection, buildingWorldPoints, null, height);
                 return;
             }
 
@@ -114,13 +136,14 @@ public class BuildingFetcher : MonoBehaviour {
             double lat = geo.Y;
             double lon = geo.X;
 
+            //wait for overpass request and handle response in the next frame
             StartCoroutine(overpass.FetchBuildingData(lat, lon, (jsonString) => {
                 if (string.IsNullOrEmpty(jsonString)) {
                     Debug.LogError("OSM fetch failed or empty.");
                     return;
                 }
 
-                //json deserialize
+                //json deserialize response
                 OSMRoot root = null;
                 try {
                     root = JsonConvert.DeserializeObject<OSMRoot>(jsonString);
@@ -141,7 +164,7 @@ public class BuildingFetcher : MonoBehaviour {
                     return;
                 }
 
-                //recalculating world point to relative unity coordinates
+                //recalculate world point to relative unity coordinates
                 List<Vector3> unityRel = OSMToUnity.ConvertPolygonToUnity(building, map, 0);
 
                 //reconstruction of unity building object
@@ -150,19 +173,23 @@ public class BuildingFetcher : MonoBehaviour {
         }
     }
 
+    //clear current selected building and destroys the object
     public void ClearSelection() {
         if (currentSelection != null) {
             buildings.Remove(currentSelection);
             Destroy(currentSelection);
             currentSelection = null;
+            buildingHover.selected = null;
         }
         if (missionGenerator != null)
             missionGenerator.ClearPath();
     }
 
+    //fetches buildings in the area around the camera
     private IEnumerator FetchArea(WaitForSeconds wait) {
         yield return wait;
 
+        //get current camera geolocation
         ArcGISPoint cam = map.EngineToGeographic(arcgisCamera.transform.position);
         double lat = cam.Y;
         double lon = cam.X;
@@ -178,13 +205,14 @@ public class BuildingFetcher : MonoBehaviour {
             Destroy(build);
         }
 
+        //wait for overpass request and handle response in the next frame
         StartCoroutine(overpass.FetchBuildingData(lat, lon, (jsonString) => {
             if (string.IsNullOrEmpty(jsonString)) {
                 Debug.LogError("OSM fetch failed or empty.");
                 return;
             }
 
-            //json deserialize
+            //json deserialize response
             OSMRoot root;
             try {
                 root = JsonConvert.DeserializeObject<OSMRoot>(jsonString);
@@ -197,6 +225,7 @@ public class BuildingFetcher : MonoBehaviour {
             if (root == null || root.elements == null)
                 return;
 
+            //reconstruct all fetched buildings
             foreach (OSMElement building in root.elements) {
                 List<Vector3> unityRel = OSMToUnity.ConvertPolygonToUnity(building, map, 0);
                 CreateBuildingMesh(unityRel, building, false);
@@ -205,7 +234,8 @@ public class BuildingFetcher : MonoBehaviour {
         }, settings.GetRange()));
     }
 
-    private float GetAltitudeFromCast(Vector3 center) {
+    //cast a ray down from high altitude to get gnd altitude
+    private float? GetAltitudeFromCast(Vector3 center) {
         Vector3 highPlace = new Vector3(center.x, highAlt, center.z);
         Ray down = new Ray(highPlace, Vector3.down);
 
@@ -213,12 +243,12 @@ public class BuildingFetcher : MonoBehaviour {
         RaycastHit[] hits = Physics.RaycastAll(down, maxDist, layer);
         if (hits.Length == 0) {
             Debug.LogWarning("No hit on ground!");
-            return 0f;
+            return null;
         }
 
+        //register the lowest hit point
         RaycastHit lowest = hits[0];
         float lowestY = lowest.point.y;
-
         foreach (RaycastHit hit in hits) {
             if (hit.point.y < lowestY) {
                 lowest = hit;
@@ -226,11 +256,13 @@ public class BuildingFetcher : MonoBehaviour {
             }
         }
 
+        //return geo altitude
         ArcGISPoint ground = map.EngineToGeographic(lowest.point);
         float alt = (float) ground.Z;
         return alt;
     }
 
+    //extracts height from OSM data
     private float GetHeight(OSMElement building) {
         float osmHeight = 0f;
 
@@ -259,6 +291,7 @@ public class BuildingFetcher : MonoBehaviour {
         return osmHeight;
     }
 
+    //reconstructs building mesh from OSM data
     public void CreateBuildingMesh(List<Vector3> worldPoints, OSMElement buildingData, bool generateMission = true) {
         if (generateMission)
             ClearSelection();
@@ -268,16 +301,20 @@ public class BuildingFetcher : MonoBehaviour {
 
         // footprint center
         Vector3 center = missionGenerator.GetMissionCenter(worldPoints);
-        float gndAlt = GetAltitudeFromCast(center);
+        float? gndAlt = GetAltitudeFromCast(center);
+        if (gndAlt == null) {
+            Toast.call.Show("Can't get altitude here, click again please", 4f, true);
+            return;
+        }
 
         //determine building height
         float osmHeight = GetHeight(buildingData);
         lastBuilding = buildingData;
         lastPoints = worldPoints;
 
-        float roof = gndAlt + osmHeight;
+        float roof = gndAlt.Value + osmHeight;
 
-        //geolocation of the object
+        //geolocation of the building object
         ArcGISPoint objMid = map.EngineToGeographic(center);
         ArcGISPoint objPiv = new ArcGISPoint(objMid.X, objMid.Y, roof, objMid.SpatialReference);
         Vector3 relative = map.GeographicToEngine(objPiv);
@@ -295,23 +332,25 @@ public class BuildingFetcher : MonoBehaviour {
         if (map != null)
             buildingObj.transform.SetParent(map.transform, true);
 
-        //place the object at relative position
+        //place the object at relative position and set layer
         buildingObj.transform.position = relative;
-
         int layer = LayerMask.NameToLayer("Buildings");
         if (layer != -1)
             buildingObj.layer = layer;
         else
             buildingObj.layer = 0;
 
+        //add geo component for accurate placement 
         ArcGISLocationComponent locComp = buildingObj.AddComponent<ArcGISLocationComponent>();
         locComp.Position = objPiv;
         locComp.Rotation = new ArcGISRotation(0, 90, 0);
         locComp.enabled = true;
 
+        //add texture components
         MeshFilter filter = buildingObj.AddComponent<MeshFilter>();
         MeshRenderer render = buildingObj.AddComponent<MeshRenderer>();
 
+        //create texture ghost
         Mesh ghost = CreateBuildingGhost(worldPoints, center, osmHeight);
         filter.mesh = ghost;
 
@@ -324,23 +363,26 @@ public class BuildingFetcher : MonoBehaviour {
         render.sharedMaterial = buildingMat;
         render.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
+        //finalize selection or add to area
         if (generateMission)
             FinishSelection(buildingObj, ghost, worldPoints, osmHeight);
         else
             AddAreaBuildings(buildingObj, worldPoints, buildingData);
     }
 
+    //finalize selection of the building on user input
     private void FinishSelection(GameObject building, Mesh ghost, List<Vector3> pts, float height) {
         FloorSelect(building, ghost, -height);
         currentSelection = building;
         buildingWorldPoints = pts;
         buildings.Add(building);
 
-        //hand over to next step
+        //generate and prepare mission for the selected building
         missionController.PrepareMission(currentSelection, buildingWorldPoints);
         MissionUI.Instance?.SetNewMission(currentSelection, buildingWorldPoints, null, height);
     }
 
+    //adds tag to each preloaded building
     private void AddAreaBuildings(GameObject obj, List<Vector3> pts, OSMElement data) {
         BuildingTag tag = obj.AddComponent<BuildingTag>();
         tag.BuildingData = data;
@@ -348,22 +390,25 @@ public class BuildingFetcher : MonoBehaviour {
         buildings.Add(obj);
     }
 
+    //creates a simple building mesh for visualization
     private Mesh CreateBuildingGhost(List<Vector3> worldPoints, Vector3 center, float height) {
         Mesh mesh = new Mesh();
         Vector3[] verts = new Vector3[worldPoints.Count * 2];
 
+        //bottom on the ground top slightly above
         float topY = 0.5f;
         float downY = -height;
         float expand = 0.1f;
 
+        //create vertex ring at ground and at roof level
         for (int i = 0; i < worldPoints.Count; i++) {
             Vector3 offset = worldPoints[i] - center;
             Vector3 local = new Vector3(offset.x, 0, offset.z);
             Vector3 dir = local.normalized;
             Vector3 inflated = local + (dir * expand);
 
-            verts[i] = new Vector3(inflated.x, downY, inflated.z);
-            verts[i + worldPoints.Count] = new Vector3(inflated.x, topY, inflated.z);
+            verts[i] = new Vector3(inflated.x, downY, inflated.z);                      //gnd ring
+            verts[i + worldPoints.Count] = new Vector3(inflated.x, topY, inflated.z);   //roof ring
         }
 
         mesh.vertices = verts;
@@ -371,15 +416,20 @@ public class BuildingFetcher : MonoBehaviour {
         List<int> tris = new List<int>();
         int off = worldPoints.Count;
 
+        //triangulate roof ear-clipping algorithm
         tris.AddRange(RoofTriang(verts, off, worldPoints.Count));
+
+        //triangulate walls each with two triangles
         for (int i = 0; i < worldPoints.Count; i++) {
             int next = (i + 1) % worldPoints.Count;
+            //front triangle
             tris.Add(i);
             tris.Add(i + off);
             tris.Add(next);
             tris.Add(next);
             tris.Add(i + off);
             tris.Add(next + off);
+            //back triangle
             tris.Add(next);
             tris.Add(i + off);
             tris.Add(i);
@@ -392,25 +442,31 @@ public class BuildingFetcher : MonoBehaviour {
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();
 
+        //roof normals facing up for realistic light reflection
+        Vector3[] norms = mesh.normals;
+        for (int i = worldPoints.Count; i < worldPoints.Count * 2; i++)
+            norms[i] = Vector3.up;
+        mesh.normals = norms;
+
         return mesh;
     }
 
-
-
+    //regenerates the currently selected building with new height
     public void RegenerateBuilding(float height) {
         buildingHeight = height;
         ClearSelection();
         CreateBuildingMesh(lastPoints, lastBuilding, true);
     }
 
+    //floor highlight selection
     private void FloorSelect(GameObject buildingObj, Mesh mesh, float bottomY) {
         Bounds b = mesh.bounds;
         b.center = new Vector3(b.center.x, bottomY + b.extents.y, b.center.z);
         FloorBoundsSelect(buildingObj, b);
     }
 
+    // highlight floor object
     public void FloorBoundsSelect(GameObject buildingObj, Bounds bounds) {
-        // highlight floor object
         GameObject floorObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         floorObj.name = "Floor_Highlight";
         floorObj.transform.SetParent(buildingObj.transform, false);
@@ -435,19 +491,22 @@ public class BuildingFetcher : MonoBehaviour {
 
         floorMr.sharedMaterial = floorMat;
         floorMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        floorObj.SetActive(showHighlight);
     }
 
     public void SetCurrentSelection(GameObject obj) {
         currentSelection = obj;
     }
 
+    //triangulates roof polygon using ear clipping algorithm
+    //inspired by https://web.archive.org/web/20200911144906/http://wiki.unity3d.com/index.php/Triangulator
     private List<int> RoofTriang(Vector3[] verts, int startIdx, int count) {
         var res = new List<int>();
         var indices = new List<int>();
         for (int i = 0; i < count; i++)
             indices.Add(i);
 
-        //polygon detection on plane
+        //shoelace formula to determine if clockwise or countercw order
         float area = 0f;
         for (int i = 0; i < count; i++) {
             int j = (i + 1) % count;
@@ -456,6 +515,7 @@ public class BuildingFetcher : MonoBehaviour {
         if (area < 0f)
             indices.Reverse();
 
+        //ear clipping triangulation
         int safe = count * count + count;
         while (indices.Count > 3 && safe-- > 0) {
             bool clipFound = false;
@@ -467,17 +527,17 @@ public class BuildingFetcher : MonoBehaviour {
                 Vector3 b = verts[startIdx + indices[i]];
                 Vector3 c = verts[startIdx + indices[iNext]];
 
-                //convex
+                //skip reflex internal angles
                 float cross = (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
                 if (cross <= 0f)
                     continue;
 
-                //no other point clipping
+                //skip if any vertex inside triangle
                 bool isEar = true;
                 for (int j = 0; j < indices.Count; j++) {
                     if (j == iPrev || j == i || j == iNext)
                         continue;
-                    if (PointInTri(a, b, c, verts[startIdx + indices[j]])) {
+                    if (PointInTriangle(a, b, c, verts[startIdx + indices[j]])) {
                         isEar = false;
                         break;
                     }
@@ -485,6 +545,7 @@ public class BuildingFetcher : MonoBehaviour {
                 if (!isEar)
                     continue;
 
+                //add triangle and remove ear vertex
                 res.Add(startIdx + indices[iPrev]);
                 res.Add(startIdx + indices[i]);
                 res.Add(startIdx + indices[iNext]);
@@ -496,6 +557,7 @@ public class BuildingFetcher : MonoBehaviour {
                 break;
         }
 
+        //add the last triangle
         if (indices.Count == 3) {
             res.Add(startIdx + indices[0]);
             res.Add(startIdx + indices[1]);
@@ -504,7 +566,11 @@ public class BuildingFetcher : MonoBehaviour {
         return res;
     }
 
-    private bool PointInTri(Vector3 a, Vector3 b, Vector3 c, Vector3 p) {
+    //determines if point is in triangle
+    //inspired by https://stackoverflow.com/a/2049593
+    private bool PointInTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 p) {
+        //cross product result to check if point is in triangle
+        //all signs same means point is in triangle
         float d1 = (p.x - b.x) * (a.z - b.z) - (a.x - b.x) * (p.z - b.z);
         float d2 = (p.x - c.x) * (b.z - c.z) - (b.x - c.x) * (p.z - c.z);
         float d3 = (p.x - a.x) * (c.z - a.z) - (c.x - a.x) * (p.z - a.z);
@@ -513,6 +579,7 @@ public class BuildingFetcher : MonoBehaviour {
         return !(hasNeg && hasPos);
     }
 
+    //enable or disable ghost visibility
     public void SetShowGhost(bool value) {
         showGhost = value;
         foreach (GameObject build in buildings) {
@@ -522,6 +589,7 @@ public class BuildingFetcher : MonoBehaviour {
         }
     }
 
+    //cleanup materials on destroy
     private void OnDestroy() {
         if (buildingMat != null)
             Destroy(buildingMat);

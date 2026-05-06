@@ -1,3 +1,14 @@
+// ============================================================
+// OSMData.cs
+//
+// Author:  Václav Sovák
+// Date:    2026-04-05
+//
+// Utilities for OSM Overpass API. Deserialize structure for 
+// JSON response and provides helpers for building selection 
+// and coordinate conversion.
+// ============================================================
+
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -21,10 +32,10 @@ public class OSMCoord {
 }
 
 public static class OSMBuildingSelector {
+    //find closer point by pythagorean distance
     public static OSMElement FindClosestBuilding(OSMRoot root, double clickLat, double clickLon) {
         OSMElement best = null;
         double bestDist = double.MaxValue;
-
         foreach (var e in root.elements) {
             if (e.type != "way" || e.geometry == null || e.geometry.Count == 0)
                 continue;
@@ -32,14 +43,15 @@ public static class OSMBuildingSelector {
             double sumLat = 0;
             double sumLon = 0;
 
+            //calculate centroid of the building
             foreach (var p in e.geometry) {
                 sumLat += p.lat;
                 sumLon += p.lon;
             }
-
             double cLat = sumLat / e.geometry.Count;
             double cLon = sumLon / e.geometry.Count;
 
+            //pythagorean distance
             double dLat = cLat - clickLat;
             double dLon = cLon - clickLon;
             double distSq = dLat * dLat + dLon * dLon;
@@ -55,6 +67,7 @@ public static class OSMBuildingSelector {
 }
 
 public static class OSMToUnity {
+    //convert each geo pos to unity position
     public static List<Vector3> ConvertPolygonToUnity(OSMElement building, ArcGISMapComponent map, double baseAltitude) {
         var result = new List<Vector3>();
         foreach (var p in building.geometry) {
