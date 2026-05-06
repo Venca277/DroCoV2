@@ -1,3 +1,13 @@
+// ============================================================
+// HeighFitterUI.cs
+//
+// Author: Václav Sovák
+// Date: 2026-05-05
+//
+// Clamps a scroll-view to a max height. Panel grows, 
+// but never exceeds maxHeight.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,6 +23,7 @@ public class HeighFitterUI : MonoBehaviour {
         layoutElement = GetComponent<LayoutElement>();
     }
 
+    //read the content height and clamp to maxHeight
     void LateUpdate() {
         if (content != null && layoutElement != null) {
             float h = LayoutUtility.GetPreferredHeight(content);

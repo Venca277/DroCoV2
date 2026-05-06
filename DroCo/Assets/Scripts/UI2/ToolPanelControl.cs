@@ -1,10 +1,21 @@
+// ============================================================
+// ToolPanelControl.cs
+//
+// Author: Václav Sovák
+// Date: 2026-05-06
+//
+// Controls the camera stream panel, size toggle, screenshot, 
+// CSV flight recording, drone camera focus and remote video 
+// recording.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using TMPro;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
+using Newtonsoft.Json;
 
 public class ToolPanelControl : MonoBehaviour {
     [Header("UI Reference")]
@@ -14,6 +25,7 @@ public class ToolPanelControl : MonoBehaviour {
     public Image focusButton;
     public Image recordButton;
     public Image stopButton;
+    public Image videoRecordButton;
     public Sprite streamIconON;
     public Sprite streamIconOFF;
     public Sprite streamIconStreaming;
@@ -25,11 +37,13 @@ public class ToolPanelControl : MonoBehaviour {
     public Sprite recordOFF;
     public Sprite stopOFF;
     public Sprite stopON;
+    public Sprite videoRecordON;
+    public Sprite videoRecordOFF;
     public TMP_Text text;
 
     [Header("Size")]
-    public Vector2 size = new Vector2(320, 180);
-    public Vector2 sizebig = new Vector2(1280, 720);
+    public Vector2 size = new Vector2(320, 180);        //stream compact size
+    public Vector2 sizebig = new Vector2(1280, 720);    //stream big size
 
     [Header("Settings")]
     public Vector3 focusDistance = new Vector3(0, 5, -10);
@@ -37,12 +51,12 @@ public class ToolPanelControl : MonoBehaviour {
 
 
     private Vector2 smallposition;
-
     private Texture2D streamTexture;
     private RectTransform rectTransform;
-    private StreamWriter writer;
+    private StreamWriter writer;        //CSV file writer handle
     private bool isBig = false;
     public bool isRecording = false;
+    public bool isVideoRecording = false;
     private byte[] lastjpeg;
     private float lastTime = 0f;
 
@@ -58,11 +72,13 @@ public class ToolPanelControl : MonoBehaviour {
     }
 
     void Update() {
+        //reset screenshot button
         if (Time.time - lastTime > 2f) {
             screenshotButton.sprite = screenshotOFF;
         }
     }
 
+    //update stream image with new jpeg data
     public void UpdateFrame(byte[] jpegData) {
         if (jpegData != null && jpegData.Length > 0) {
             lastTime = Time.time;
@@ -71,12 +87,14 @@ public class ToolPanelControl : MonoBehaviour {
             streamButton.sprite = streamIconStreaming;
             screenshotButton.sprite = screenshotON;
         }
+        //hide text on first frame received
         if (text.enabled) {
             text.enabled = false;
             stream.color = Color.white;
         }
     }
 
+    //toggle between big and small stream size
     public void ToggleSize() {
         isBig = !isBig;
 
@@ -90,6 +108,7 @@ public class ToolPanelControl : MonoBehaviour {
         }
     }
 
+    //toggle camera focus on drone
     public void ToggleFocus() {
         isFocused = !isFocused;
         Vector3 pos = DroneManager.Instance.GetFirstDronePosition();
@@ -107,6 +126,7 @@ public class ToolPanelControl : MonoBehaviour {
         }
     }
 
+    //toggle flight recording
     public void ToggleRecording() {
         isRecording = !isRecording;
         Vector3 pos = DroneManager.Instance.GetFirstDronePosition();
@@ -125,6 +145,7 @@ public class ToolPanelControl : MonoBehaviour {
         }
     }
 
+    //toggle stream
     public void TurnOff() {
         stream.enabled = !stream.enabled;
         text.enabled = !text.enabled;
@@ -136,12 +157,16 @@ public class ToolPanelControl : MonoBehaviour {
         }
     }
 
+    //take a screenshot of the current stream frame and save to file
     public void Screenshot() {
         if (lastjpeg == null || screenshotButton.sprite == screenshotOFF) {
             Toast.call.Show("No stream available to screenshot");
             return;
         }
 
+        WebSocketServer.Instance?.BroadcastToAll(JsonConvert.SerializeObject(new {
+            type = "take_photo"
+        }));
         if (lastjpeg != null && lastjpeg.Length > 0) {
             string timestamp = System.DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
             string filename = "screenshot_" + timestamp + ".jpg";
@@ -156,6 +181,7 @@ public class ToolPanelControl : MonoBehaviour {
         }
     }
 
+    //start recording flight data to CSV file
     public void StartRecording() {
         string timestamp = System.DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
         string filename = "flight_recorder_" + timestamp + ".csv";
@@ -163,13 +189,13 @@ public class ToolPanelControl : MonoBehaviour {
             writer = new StreamWriter(System.IO.Path.Combine(Application.persistentDataPath, filename));
             writer.WriteLine("client_id,altitude,latitude,longitude,velocity_x,velocity_y,velocity_z,battery_percentage");
             Toast.call.Show("Recording started", 1f);
-
         } catch (IOException e) {
             Debug.LogError("Failed to create recording file: " + e.Message);
             return;
         }
     }
 
+    //stop recording flight data to CSV file
     public void StopRecording() {
         if (writer != null) {
             writer.Close();
@@ -179,6 +205,7 @@ public class ToolPanelControl : MonoBehaviour {
         }
     }
 
+    //record a line of flight data to CSV file
     public void RecordData(DroneFlightData data) {
         if (writer != null) {
             string line = $"{data.client_id},{data.altitude},{data.gps.latitude},{data.gps.longitude},{data.aircraft_velocity.velocity_x},{data.aircraft_velocity.velocity_y},{data.aircraft_velocity.velocity_z}";
@@ -186,6 +213,7 @@ public class ToolPanelControl : MonoBehaviour {
         }
     }
 
+    //updates the camera position to follow the drone
     public void LateUpdate() {
         if (isFocused) {
             Vector3 dronePosition = DroneManager.Instance.GetFirstDronePosition();
@@ -198,12 +226,32 @@ public class ToolPanelControl : MonoBehaviour {
         }
     }
 
+    //emergency stop for the mission
     public void emergencyStop() {
         MissionController controller = FindObjectOfType<MissionController>();
         if (controller != null) {
             controller.MissionStop();
         } else {
             Toast.call.Show("Stop requested failed!", 2f, true);
+        }
+    }
+
+    //toggle video recording
+    public void ToggleVideoRecording() {
+        if (isVideoRecording) {
+            isVideoRecording = false;
+            WebSocketServer.Instance?.BroadcastToAll(JsonConvert.SerializeObject(new {
+                type = "stop_recording"
+            }));
+            videoRecordButton.sprite = videoRecordOFF;
+            Toast.call.Show("Video recording stopped", 1f);
+        } else {
+            isVideoRecording = true;
+            WebSocketServer.Instance?.BroadcastToAll(JsonConvert.SerializeObject(new {
+                type = "start_recording"
+            }));
+            videoRecordButton.sprite = videoRecordON;
+            Toast.call.Show("Video recording started", 1f);
         }
     }
 }

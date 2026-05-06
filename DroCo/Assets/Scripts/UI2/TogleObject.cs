@@ -1,3 +1,12 @@
+// ============================================================
+// TogleObject.cs
+//
+// Author: Václav Sovák
+// Date: 2026-05-06
+//
+// Simple active/inactive toggle for any GameObject.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;

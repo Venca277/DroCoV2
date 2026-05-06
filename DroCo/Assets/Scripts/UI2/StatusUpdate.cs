@@ -1,6 +1,15 @@
+// ============================================================
+// StatusUpdate.cs
+//
+// Author: Václav Sovák
+// Date: 2026-05-06
+//
+// Updates the status UI provides signal, battery,
+// drone name, altitude and warning icons from live DroneStatusData.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
-//using Microsoft.Unity.VisualStudio.Editor;
 using TMPro;
 using Unity.VisualScripting;
 using UnityEngine;
@@ -31,6 +40,7 @@ public class StatusUpdate : Singleton<StatusUpdate> {
     [Header("UI")]
     public Image signal;
     public TMP_Text latency;
+    public TMP_Text altitude;
     public Image droneIcon;
     public Image missionIcon;
     public TMP_Text droneName;
@@ -43,43 +53,9 @@ public class StatusUpdate : Singleton<StatusUpdate> {
     public Image state4;
     public Image state5;
 
+    private Color active = new Color(0.7f, 0.97f, 0.78f);
+    //updates UI status on every status update message 
     public void HandleStatusUpdate(DroneStatusData status) {
-        //Debug.Log("Status update: " + status);
-        //debug
-        /*
-        if (status == null) {
-            Debug.LogWarning("Received null status data");
-            return;
-        }
-
-        GameObject topbar = GameObject.Find("TopBar");
-        if (topbar == null) {
-            Debug.LogWarning("Could not find TopBar in the scene");
-            return;
-        }
-        Transform left = topbar.transform.Find("Left");
-        Transform stroke = topbar.transform.Find("stroke");
-        if (left == null || stroke == null) {
-            Debug.LogWarning("Could not find Left or stroke in TopBar");
-            return;
-        }
-
-        Image signal = left.Find("signal").GetComponent<Image>();
-        TMP_Text latency = left.Find("latency").GetComponent<TMP_Text>();
-        if (signal == null || latency == null) {
-            Debug.LogWarning("Could not find signal image or latency text in Left");
-            return;
-        }
-
-        Image droneIcon = stroke.Find("drone").GetComponent<Image>();
-        Image missionIcon = stroke.Find("mission").GetComponent<Image>();
-        TMP_Text droneName = stroke.Find("droneText").GetComponent<TMP_Text>();
-        TMP_Text missionName = stroke.Find("missionText").GetComponent<TMP_Text>();
-        if (droneIcon == null || missionIcon == null || droneName == null || missionName == null) {
-            Debug.LogWarning("Could not find drone or mission icons or texts in stroke");
-            return;
-        }
-        */
 
         if (droneIcon != null)
             droneIcon.preserveAspect = false;
@@ -88,19 +64,18 @@ public class StatusUpdate : Singleton<StatusUpdate> {
         if (signal != null)
             signal.preserveAspect = false;
 
-
+        //update drone icon and name in dronelist
         if (status.drone_model != null && status.drone_model != "" && droneIcon != null && droneName != null) {
             droneIcon.sprite = droneActive;
             droneIcon.rectTransform.sizeDelta = new Vector2(80, 80);
-            droneName.text = status.drone_model;
-            droneName.fontSize = 36;
+            SetDroneActive(status.drone_model);
         } else if (droneIcon != null && droneName != null) {
             droneIcon.sprite = drone;
             droneIcon.rectTransform.sizeDelta = new Vector2(80, 80);
-            droneName.text = "Unknown aircraft";
-            droneName.fontSize = 36;
+            SetDroneActive("Unknown aircraft");
         }
 
+        //update signal strength and latency
         if (status.gps != null && status.gps.signal_level >= 0 && status.gps.signal_level <= 5 && signal != null && latency != null) {
             switch (status.gps.signal_level) {
                 case 0:
@@ -133,45 +108,16 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             Debug.LogWarning("Invalid GPS signal");
         }
 
-        /*
-        GameObject dronelist = GameObject.Find("DroneListContainer");
-        if (dronelist == null) {
-            Debug.LogWarning("Could not find DroneListContainer");
-            return;
-        }
-        Transform header = dronelist.transform.Find("Header");
-        Transform content = dronelist.transform.Find("Content");
-        if (content == null || header == null) {
-            Debug.LogWarning("Could not find Content in DroneListContainer");
-            return;
-        }
-        Transform row1 = content.Find("Row1");
-        Transform row1status = content.Find("Row1status");
-        if (row1 == null || row1status == null) {
-            Debug.LogWarning("Could not find Row1 or Row1status in Content");
-            return;
-        }
-
-        Transform leftdrone = row1.Find("Left");
-        TMP_Text droneText = leftdrone.Find("droneText").GetComponent<TMP_Text>();
-        Image dronebarIcon = header.Find("droneIcon").GetComponent<Image>();
-        Image batteryIcon = row1.Find("batteryIcon").GetComponent<Image>();
-        if (droneText == null || batteryIcon == null || dronebarIcon == null) {
-            Debug.LogWarning("Could not find droneText or batteryIcon or dronebarIcon in Row1");
-            return;
-        }
-        */
-
+        //update drone name in dronebar and drone icon
         if (status.drone_model != null && status.drone_model != "" && droneText != null && dronebarIcon != null) {
-            droneText.text = status.drone_model;
-            droneText.fontSize = 30;
+            SetDroneActive(status.drone_model);
             dronebarIcon.sprite = droneActive;
         } else if (droneText != null && dronebarIcon != null) {
-            droneText.text = "Unknown aircraft";
-            droneText.fontSize = 30;
+            ResetDroneUI();
             dronebarIcon.sprite = droneActive;
         }
 
+        //update battery icon in dronelist
         if (status.battery != null && batteryIcon != null) {
             if (status.battery.low_battery_warning) {
                 batteryIcon.sprite = batteryCritical;
@@ -194,6 +140,7 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             batteryIcon.rectTransform.sizeDelta = new Vector2(40, 40);
         }
 
+        //update warning icons in dronelist
         if (state1 != null)
             state1.gameObject.SetActive(false);
         if (state2 != null)
@@ -204,7 +151,6 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             state4.gameObject.SetActive(false);
         if (state5 != null)
             state5.gameObject.SetActive(false);
-
         if (status.warnings != null && state1 != null && state2 != null && state3 != null && state4 != null && state5 != null) {
             if (!status.warnings.strong_wind_warning && !status.warnings.max_height_reached && !status.warnings.max_distance_reached && !status.warnings.imu_preheating && !status.warnings.compass_error) {
                 state1.sprite = statusOK;
@@ -241,6 +187,40 @@ public class StatusUpdate : Singleton<StatusUpdate> {
                 return;
             state1.sprite = statusOK;
             state1.gameObject.SetActive(true);
+        }
+
+        //update altitude text
+        if (altitude != null) {
+            if (status.gps != null) {
+                altitude.text = "( " + status.gps.altitude.ToString("F1") + " m )";
+            } else {
+                altitude.text = "N/A";
+            }
+        }
+    }
+
+    //set drone name and icon to active
+    public void SetDroneActive(string model) {
+        if (droneName != null) {
+            droneName.text = model;
+            droneName.color = active;
+            droneIcon.sprite = droneActive;
+        }
+        if (droneText != null) {
+            droneText.text = model;
+            droneText.color = active;
+        }
+    }
+    //reset drone name and icon to default
+    public void ResetDroneUI() {
+        if (droneName != null) {
+            droneName.text = "No drone";
+            droneName.color = Color.white;
+            droneIcon.sprite = drone;
+        }
+        if (droneText != null) {
+            droneText.text = "No drone";
+            droneText.color = Color.white;
         }
     }
 }

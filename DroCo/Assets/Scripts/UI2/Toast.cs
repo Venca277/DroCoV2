@@ -1,3 +1,12 @@
+// ============================================================
+// Toast.cs
+//
+// Author: Václav Sovák
+// Date: 2026-05-06
+//
+// Global notification popup.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -5,7 +14,7 @@ using TMPro;
 using UnityEngine.UI;
 
 public class Toast : MonoBehaviour {
-    public static Toast call;
+    public static Toast call;   //global access point
 
     [Header("Settings")]
     public CanvasGroup group;
@@ -17,6 +26,7 @@ public class Toast : MonoBehaviour {
     private Coroutine rutine;
 
     void Awake() {
+        //only one toast at a time
         if (call == null)
             call = this;
         else
@@ -25,6 +35,7 @@ public class Toast : MonoBehaviour {
         group.alpha = 0f;
     }
 
+    //show a toast with the given message and duration
     public void Show(string warning, float duration = 2.0f, bool isHigh = false) {
         toastText.text = warning;
         iconImage.sprite = isHigh ? warningIconHigh : warningIcon;
@@ -35,6 +46,7 @@ public class Toast : MonoBehaviour {
         rutine = StartCoroutine(FadeToast(duration));
     }
 
+    //fade in, then wait for duration and fade out
     IEnumerator FadeToast(float duration) {
         float fadeSpeed = 5f;
         while (group.alpha < 1) {

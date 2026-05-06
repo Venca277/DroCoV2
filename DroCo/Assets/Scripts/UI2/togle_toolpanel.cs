@@ -1,3 +1,12 @@
+// ============================================================
+// togle_toolpanel.cs
+//
+// Author: Václav Sovák
+// Date: 2026-05-06
+//
+// Toggles a panel open/close via Animator bool.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;

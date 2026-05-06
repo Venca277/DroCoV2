@@ -1,3 +1,13 @@
+// ============================================================
+// WaypointUI.cs
+//
+// Author: Václav Sovák
+// Date: 2026-05-06
+//
+// Foldout row in the waypoint list. Expands or
+// collapses the detail content.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -27,6 +37,7 @@ public class WaypointUI : MonoBehaviour {
             StartCoroutine(updateAfterClose());
     }
 
+    //updates the layout after closing the foldout
     IEnumerator updateAfterClose() {
         yield return new WaitForEndOfFrame();
 
