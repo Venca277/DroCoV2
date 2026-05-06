@@ -1,3 +1,13 @@
+// ============================================================
+// DroneStatusData.cs
+//
+// Author:  Václav Sovák
+// Date:    2026-03-20
+//
+// Serializable data for drone status messages received
+// from WebSocket.
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
@@ -9,22 +19,22 @@ public class DroneStatusData {
     public string client_id;
     public long timestamp;
     public string drone_model;
-    public GPSData gps;
-    public BatteryData battery;
-    public OrientationData orientation;
-    public VelocityData velocity;
-    public WarningsData warnings;
+    public GPSData gps;                 //gps state of the drone
+    public BatteryData battery;         //battery state of the drone
+    public OrientationData orientation; //orientation of the drone
+    public VelocityData velocity;       //velocity of the drone
+    public WarningsData warnings;       //warnings and alerts from the drone
 }
 
 [Serializable]
 public class GPSData {
     public float latitude;
     public float longitude;
-    public float altitude;
-    public int satellite_count;
-    public int signal_level;
-    public string signal_name;
-    public float distance_from_home;
+    public float altitude;              //altitude above sea level in meters
+    public int satellite_count;         //number of used satellites
+    public int signal_level;            //signal strength level 0-5
+    public string signal_name;          //textual description of signal strength
+    public float distance_from_home;    //distance from home point in meters
 }
 
 [Serializable]
@@ -39,10 +49,10 @@ public class BatteryData {
 
 [Serializable]
 public class OrientationData {
-    public float pitch;
-    public float roll;
-    public float yaw;
-    public float compass;
+    public float pitch;     //nose up/down
+    public float roll;      //left/right tilt
+    public float yaw;       //heading direction
+    public float compass;   //compass heading in degrees
 }
 
 [Serializable]
@@ -50,7 +60,7 @@ public class VelocityData {
     public float x;
     public float y;
     public float z;
-    public float horizontal_velocity;
+    public float horizontal_velocity; //combined horizontal speed
 }
 
 [Serializable]

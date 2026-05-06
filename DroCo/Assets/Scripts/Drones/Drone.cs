@@ -105,7 +105,7 @@ public class Drone : InteractiveObject, IPointerNotifier {
         DroneListItem.UpdateHeight(flightData.altitude);
         DroneListItem.UpdateDistance(Vector3.Distance(Camera.main.transform.position, this.transform.position));
 
-        //very dangerous bug, found 24. 2. 2026 by xsovakv00
+        //xsovakv00 2026-02-24
         //drone telemetry not checked for null
         if (!string.IsNullOrEmpty(flightData.frame)) {
             byte[] frame = Convert.FromBase64String(flightData.frame);
@@ -154,5 +154,9 @@ public class Drone : InteractiveObject, IPointerNotifier {
     public void OnDestroy() {
         Destroy(DroneListItem.gameObject);
         Destroy(drone2DRepresentation.gameObject);
+
+        //xsovakv00 on 2026-05-01
+        //reset drone UI on destroy
+        StatusUpdate.Instance?.ResetDroneUI();
     }
 }
