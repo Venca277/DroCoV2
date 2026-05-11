@@ -23,6 +23,7 @@ public class Settings : MonoBehaviour {
     public BuildingHover buildingHover;
     public GameManager gameManager;
     public Navigator navigator;
+    public DroneCollisionAlert collisionAlert;
     public TMP_Dropdown droneType;
     public TMP_Dropdown controllMode;
     public TMP_Dropdown preloadOSM;
@@ -32,6 +33,7 @@ public class Settings : MonoBehaviour {
     public Toggle reverseOrder;
     public Toggle liftBuildings;
     public Toggle userCenter;
+    public Toggle showWarnings;
 
     private List<string> drones = new List<string>();
     public bool isWaypointMission = false;
@@ -75,6 +77,9 @@ public class Settings : MonoBehaviour {
         }
         if (userCenter != null) {
             userCenter.onValueChanged.AddListener(OnUserCenterChanged);
+        }
+        if (showWarnings != null) {
+            showWarnings.onValueChanged.AddListener(OnShowWarningsChanged);
         }
     }
 
@@ -153,5 +158,9 @@ public class Settings : MonoBehaviour {
 
     private void OnUserCenterChanged(bool value) {
         gameManager.userCenter = value;
+    }
+
+    private void OnShowWarningsChanged(bool value) {
+        collisionAlert.alertEnabled = value;
     }
 }

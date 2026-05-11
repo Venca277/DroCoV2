@@ -718,8 +718,7 @@ public class MissionController : MonoBehaviour {
     }
 
     public void SetPathColor(Color value) {
-        generator.pathColor = value;
-        Regenerate();
+        generator.SetPathColor(value);
     }
 
     public void SetWidthOverlap(float value) {

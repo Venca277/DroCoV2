@@ -82,6 +82,12 @@ public class Navigator : MonoBehaviour {
 
         currentWaypointIndex = 0;
         isMissionRunning = true;
+        WebSocketServer.Instance?.BroadcastToAll(JsonConvert.SerializeObject(new {
+            type = "enable_control",
+            data = new {
+                enable = true
+            }
+        }));
         posTimer = 0f;
         waypointTimer = waypointTime;
         logFileTimer = 0f;
@@ -223,7 +229,11 @@ public class Navigator : MonoBehaviour {
             return;
         }
 
-        //control calculations inspered by https://docs.px4.io/main/en/flight_stack/controller_diagrams.html
+        //simple controller that commands a velocity and clamps limits
+        //source: PX4 Autopilot Documentation
+        //url: https://docs.px4.io/main/en/flight_stack/controller_diagrams.html
+        //architecture inspired by PX4, implementation is custom
+        //=========================================================================
         //get the shortest angle
         //rotation calculation
         float yawErr = Mathf.DeltaAngle(droneYaw, targetYaw);
@@ -249,6 +259,7 @@ public class Navigator : MonoBehaviour {
         bool yawAligned = Mathf.Abs(yawErr) < 15f;
         float cmdPitch = (flatDist > 0.5f && yawAligned) ? Mathf.Clamp(distanceForward * 0.5f, -maxSpeed, maxSpeed) : 0f;
         float cmdRoll = (flatDist > 0.5f && yawAligned) ? Mathf.Clamp(distanceRight * 0.5f, -maxSpeed, maxSpeed) : 0f;
+        //=========================================================================
 
         //logging
         logFileTimer += Time.deltaTime;
@@ -289,9 +300,14 @@ public class Navigator : MonoBehaviour {
 
     //immediate stop and log flight data
     public void StopDrone() {
-        SendControlCommand(0, 0, 0, 0, 0);
         isMissionRunning = false;
-        Debug.Log("Mission stopped.");
+        SendControlCommand(0, 0, 0, 0, 0);
+        WebSocketServer.Instance?.BroadcastToAll(JsonConvert.SerializeObject(new {
+            type = "enable_control",
+            data = new {
+                enable = false
+            }
+        }));
         string path = Application.persistentDataPath + "/flight_log.txt";
         System.IO.File.WriteAllText(path, logger.ToString());
         Toast.call.Show("Mission stopped!", 2f, true);

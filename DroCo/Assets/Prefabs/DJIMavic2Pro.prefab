@@ -285,9 +285,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d078a99b791de844db0240abf4009eaa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  warnDist: 2
-  dangerDist: 1
-  check: 0.5
+  warnDist: 1
+  dangerDist: 0.5
+  check: 1
+  alertEnabled: 0
 --- !u!1 &4881565667857086065
 GameObject:
   m_ObjectHideFlags: 0

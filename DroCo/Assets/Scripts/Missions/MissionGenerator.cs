@@ -195,8 +195,12 @@ public class MissionGenerator : MonoBehaviour {
 
         footprint = cleanFootprint;
 
-        //determine winding order with shoelace formula
-        //shoelace formula inspired by https://web.archive.org/web/20240418082212/https://stackoverflow.com/questions/1165647/how-to-determine-if-a-list-of-polygon-points-are-in-clockwise-order/1165943#1165943
+        //determine polygon orientation using shoelace formula
+        //source: Stack Overflow
+        //author: Olivier Jacot-Descombes (https://stackoverflow.com/users/880990/olivier-jacot-descombes)
+        //url: https://stackoverflow.com/a/1165943
+        //license: CC BY-SA 3.0
+        // =========================================================================
         float signedAreaPre = 0f;
         for (int fi = 0; fi < footprint.Count; fi++) {
             Vector3 fa = footprint[fi];
@@ -206,6 +210,7 @@ public class MissionGenerator : MonoBehaviour {
             signedAreaPre += (fa.x * fb.z) - (fb.x * fa.z);
         }
         bool clockW = (signedAreaPre > 0f);
+        // =========================================================================
 
         //subdivide edges to match maxsegment length
         List<Vector3> sepFootprint = new List<Vector3>();
@@ -273,8 +278,12 @@ public class MissionGenerator : MonoBehaviour {
             Vector3 normPrev = clockW ? new Vector3(dirPrev.z, 0, -dirPrev.x) : new Vector3(-dirPrev.z, 0, dirPrev.x);
             Vector3 normNext = clockW ? new Vector3(dirNext.z, 0, -dirNext.x) : new Vector3(-dirNext.z, 0, dirNext.x);
 
-            //miter vector to pushoutward and respect corners
-            //inspired by https://stackoverflow.com/a/54042831
+            //miter joint offset calculation for polygon edges
+            //source: Stack Overflow
+            //author: MBo (https://stackoverflow.com/users/844416/mbo)
+            //url: https://stackoverflow.com/a/54042831
+            //license: CC BY-SA 4.0
+            //=========================================================================
             Vector3 miterSum = normPrev + normNext;
             float miterMag = miterSum.magnitude;
             Vector3 offsetPoint;
@@ -287,6 +296,7 @@ public class MissionGenerator : MonoBehaviour {
                 miterDist = Mathf.Min(miterDist, scanDistance * 2.0f); //convex limit for sharp corners
                 offsetPoint = curr + miterSum.normalized * miterDist;
             }
+            // =========================================================================
 
             float minOrbitSpacing = (missionType == MissionType.Vertical) ? photoInterval * 0.8f : 0.1f;
             if (orbitRing.Count == 0 || Vector3.Distance(offsetPoint, orbitRing[orbitRing.Count - 1]) > minOrbitSpacing) {
@@ -721,6 +731,24 @@ public class MissionGenerator : MonoBehaviour {
         }
     }
 
+    //update color of tubes without regenerating the whole path
+    public void SetPathColor(Color color) {
+        pathColor = color;  //set new color
+        if (tubeMaterial != null)
+            tubeMaterial.color = color;
+        if (lineRenderer != null)
+            lineRenderer.material.color = color;
+
+        //update all active tubes
+        foreach (var wp in waypoints) {
+            foreach (var tube in wp.Value.tubes) {
+                MeshRenderer mr = tube.GetComponent<MeshRenderer>();
+                if (mr != null)
+                    mr.material.color = color;
+            }
+        }
+    }
+
     //instantiates waypoint prefab and set parameters
     private GameObject CreateWaypoint(Vector3 pos, int index, int pathCount, int level = 0) {
         GameObject wpObj = null;
@@ -843,7 +871,10 @@ public class MissionGenerator : MonoBehaviour {
     }
 
     //recalculates photo interval and vertical step based on current parameters
-    //inspired by https://support.pix4d.com/hc/en-us/articles/202557469
+    //calculation of the camera footprint and steps is based on photogrammetry principles.
+    //Source: LILLESAND, Thomas, Ralph W. KIEFER and Jonathan CHIPMAN. 
+    //Remote sensing and image interpretation. 7th ed. Wiley, 2015.
+    //========================================================================
     public void RecalculateSteps() {
         float footprintH = scanDistance * (senzHeight / focalLength);
         float footprintW = scanDistance * (senzWidth / focalLength);
@@ -851,6 +882,7 @@ public class MissionGenerator : MonoBehaviour {
         photoInterval = Mathf.Max(footprintW * (1f - widthOverlap), 0.3f);
         //maxSegmentLen = photoInterval;
     }
+    //========================================================================
 
     //destroys all waypoints and tubes, clears the dictionary
     public void ClearPath() {

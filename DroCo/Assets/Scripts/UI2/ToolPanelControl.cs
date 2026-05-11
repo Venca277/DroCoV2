@@ -57,6 +57,7 @@ public class ToolPanelControl : MonoBehaviour {
     private bool isBig = false;
     public bool isRecording = false;
     public bool isVideoRecording = false;
+    public bool isStopped = false;
     private byte[] lastjpeg;
     private float lastTime = 0f;
 
@@ -230,6 +231,12 @@ public class ToolPanelControl : MonoBehaviour {
     public void emergencyStop() {
         MissionController controller = FindObjectOfType<MissionController>();
         if (controller != null) {
+            isStopped = !isStopped;
+            if (isStopped) {
+                stopButton.sprite = stopON;
+            } else {
+                stopButton.sprite = stopOFF;
+            }
             controller.MissionStop();
         } else {
             Toast.call.Show("Stop requested failed!", 2f, true);

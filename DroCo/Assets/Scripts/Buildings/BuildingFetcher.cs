@@ -498,8 +498,10 @@ public class BuildingFetcher : MonoBehaviour {
         currentSelection = obj;
     }
 
-    //triangulates roof polygon using ear clipping algorithm
-    //inspired by https://web.archive.org/web/20200911144906/http://wiki.unity3d.com/index.php/Triangulator
+    //algorithm: Polygon triangulation using ear-clipping
+    //source: Unity Community Wiki
+    //url: https://web.archive.org/web/20200911144906/http://wiki.unity3d.com/index.php/Triangulator
+    //=========================================================================
     private List<int> RoofTriang(Vector3[] verts, int startIdx, int count) {
         var res = new List<int>();
         var indices = new List<int>();
@@ -565,9 +567,14 @@ public class BuildingFetcher : MonoBehaviour {
         }
         return res;
     }
+    //=========================================================================
 
     //determines if point is in triangle
-    //inspired by https://stackoverflow.com/a/2049593
+    //source: Stack Overflow
+    //author: Krzysztof Kisielewicz (https://stackoverflow.com/users/233522/kornel-kisielewicz)
+    //url: https://stackoverflow.com/a/2049593
+    //license: CC BY-SA 3.0
+    //=========================================================================
     private bool PointInTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 p) {
         //cross product result to check if point is in triangle
         //all signs same means point is in triangle
@@ -578,6 +585,7 @@ public class BuildingFetcher : MonoBehaviour {
         bool hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
         return !(hasNeg && hasPos);
     }
+    //=========================================================================
 
     //enable or disable ghost visibility
     public void SetShowGhost(bool value) {
