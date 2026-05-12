@@ -39,6 +39,10 @@ public class DroneManager : Singleton<DroneManager> {
             Drones.Remove(droneId);
             Destroy(droneToBeRemoved.gameObject);
         }
+
+        if (Drones.Count <= 0) {
+            StatusUpdate.Instance.ResetDroneUI();
+        }
     }
 
     public void HandleReceivedDroneData(DroneFlightData flightData) {

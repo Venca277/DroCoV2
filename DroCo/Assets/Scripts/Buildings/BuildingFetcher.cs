@@ -390,6 +390,14 @@ public class BuildingFetcher : MonoBehaviour {
         buildings.Add(obj);
     }
 
+    //trigger area fetch with current settings range
+    public void TriggerFetchArea() {
+        if (settings.range == "none" || settings.range == "")
+            return;
+        StopCoroutine("FetchArea");
+        StartCoroutine(FetchArea(new WaitForSeconds(0f)));
+    }
+
     //creates a simple building mesh for visualization
     private Mesh CreateBuildingGhost(List<Vector3> worldPoints, Vector3 center, float height) {
         Mesh mesh = new Mesh();

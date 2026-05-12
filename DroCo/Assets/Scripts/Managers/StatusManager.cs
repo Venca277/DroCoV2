@@ -1,3 +1,14 @@
+// ============================================================
+// StatusManager.cs
+//
+// Author: Václav Sovák
+// Date: 2026-05-05
+//
+// status updater for warnings and signal
+// received in drone status data and displays them
+// as notifications. 
+// ============================================================
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -8,15 +19,15 @@ using TMPro;
 public class StatusManager : MonoBehaviour {
 
     [Header("Status Object")]
-    [SerializeField] private TMP_Text signal;
-    [SerializeField] private TMP_Text battery;
-    [SerializeField] private TMP_Text droneName;
-    [SerializeField] private TMP_Text missionName;
+    public TMP_Text signal;
+    public TMP_Text battery;
+    public TMP_Text droneName;
+    public TMP_Text missionName;
 
+    public NotificationManager notifPrefab;
+    public Transform notificationParent;
 
-    [SerializeField] private NotificationManager notifPrefab;
-    [SerializeField] private Transform notificationParent;
-
+    //warning flags for displaying only once
     private bool warningActive = false;
     private bool warningWind = false;
     private bool warningDistance = false;
@@ -24,6 +35,7 @@ public class StatusManager : MonoBehaviour {
     private bool warningIMU = false;
     private bool warningCompass = false;
 
+    //warning types
     private const int WARNING_TYPE_WIND = 0;
     private const int WARNING_TYPE_DISTANCE = 1;
     private const int WARNING_TYPE_HEIGHT = 2;
@@ -31,18 +43,11 @@ public class StatusManager : MonoBehaviour {
     private const int WARNING_TYPE_COMPASS = 4;
     public bool MissionRunning { get; private set; } = false;
 
-    void Start() {
-
-    }
-
-    void Update() {
-
-    }
-
     public void HandleReceivedStatusUpdate(DroneStatusData statusData) {
 
         //check if we got info about the drone we display
         if (DroneManager.Instance.Drones.ContainsKey(statusData.client_id)) {
+            //update signal icon in the top bar
             switch (statusData.gps.signal_level) {
                 case 0:
                     signal.text = "0 %";
@@ -74,49 +79,41 @@ public class StatusManager : MonoBehaviour {
                     break;
             }
 
+            //update name of drone or set uknown
             if (statusData.drone_model != null && statusData.drone_model != droneName.text) {
                 droneName.text = statusData.drone_model;
             } else if (droneName.text == null || droneName.text == "") {
                 droneName.text = "Unknown Aircraft";
             }
 
+            //set distance
             if (statusData.gps.distance_from_home > 0) {
                 missionName.text = statusData.gps.distance_from_home.ToString("0.0") + " m";
             }
 
+            //display warnings only once
             if (statusData.warnings.strong_wind_warning && !warningWind) {
-                ShowWarning("Strong Wind Warning", "The drone is experiencing strong winds.");
+                Toast.call.Show("Strong wind warning!", 5f, true);
                 setWarning(WARNING_TYPE_WIND);
             } else if (statusData.warnings.max_distance_reached && !warningDistance) {
-                ShowWarning("Max Distance Warning", "The drone has reached its maximum distance from the home point.");
+                Toast.call.Show("Max distance warning!", 5f, true);
                 setWarning(WARNING_TYPE_DISTANCE);
             } else if (statusData.warnings.max_height_reached && !warningHeight) {
-                ShowWarning("Max Height Warning", "The drone has reached its maximum height.");
+                Toast.call.Show("Max height warning!", 5f, true);
                 setWarning(WARNING_TYPE_HEIGHT);
             } else if (statusData.warnings.imu_preheating && !warningIMU) {
-                ShowWarning("IMU Preheating", "The drone's IMU is preheating. Please wait.");
+                Toast.call.Show("IMU preheating warning!", 5f, true);
                 setWarning(WARNING_TYPE_IMU);
             } else if (statusData.warnings.compass_error && !warningCompass) {
-                ShowWarning("Compass Error", "The drone is having a compass error.");
+                Toast.call.Show("Compass error warning!", 5f, true);
                 setWarning(WARNING_TYPE_COMPASS);
             }
-        } else { //prisla data s neznamym drone ID -> pozadame server o novy seznam dronu
+        } else { //uknown drone id
 
         }
     }
 
-    public void ShowWarning(string title, string message) {
-        NotificationManager notif = Instantiate(this.notifPrefab, notificationParent);
-
-        notif.title = title;
-        notif.description = message;
-        notif.enableTimer = true;
-        notif.timer = 3f;
-
-        notif.UpdateUI();
-        notif.Open();
-    }
-
+    //set warning flags to display only once
     private void setWarning(int WARNING_TYPE) {
         switch (WARNING_TYPE) {
             case WARNING_TYPE_WIND:

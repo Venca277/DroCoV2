@@ -223,17 +223,22 @@ public class WebSocketServerBehavior : WebSocketBehavior {
         yield return null;
     }
 
+    //xsovakv00 2026-03-20
+    //added method to handle updates of new drone status protocol
     private IEnumerator HandleStatusUpdate(DroneStatusData statusData) {
-        //Debug.Log("Received status update for drone " + statusData.client_id + " at timestamp " + Time.time.ToString("hh:mm:ss"));
         StatusUpdate.Instance.HandleStatusUpdate(statusData);
         yield return null;
     }
 
+    //xsovakv00 2026-03-20
+    //future work to handle updates of current mission status
     private IEnumerator HandleMissionStatus(MissionStatusData missionStatus) {
         //MissionManager.Instance.HandleReceivedMissionStatus(missionStatus);
         yield return null;
     }
 
+    //xsovakv00 2026-03-20
+    //future work to handle updates of current mission progress
     private IEnumerator HandleMissionProgress(MissionProgressData missionProgress) {
         //MissionManager.Instance.HandleReceivedMissionProgress(missionProgress);
         yield return null;
@@ -343,8 +348,6 @@ public class WebSocketServer : Singleton<WebSocketServer> {
             var service = Server.WebSocketServices["/"];
 
             if (service != null) {
-                //TODO uncomment after debug
-                //Debug.Log($"Broadcasting message to {service.Sessions.Count} clients.");
                 service.Sessions.Broadcast(jsonMessage);
             } else {
                 Debug.LogError("WebSocket service not found!");

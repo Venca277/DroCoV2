@@ -222,5 +222,27 @@ public class StatusUpdate : Singleton<StatusUpdate> {
             droneText.text = "No drone";
             droneText.color = Color.white;
         }
+        if (latency != null)
+            latency.text = "0.0 ms";
+        if (altitude != null)
+            altitude.text = "( 0.0 m )";
+        if (batteryIcon != null)
+            batteryIcon.sprite = batteryFull;
+
+        if (signal != null)
+            signal.sprite = signalExcellent;
+        if (dronebarIcon != null)
+            dronebarIcon.sprite = drone;
+
+        if (state1 != null)
+            state1.gameObject.SetActive(false);
+        if (state2 != null)
+            state2.gameObject.SetActive(false);
+        if (state3 != null)
+            state3.gameObject.SetActive(false);
+        if (state4 != null)
+            state4.gameObject.SetActive(false);
+        if (state5 != null)
+            state5.gameObject.SetActive(false);
     }
 }

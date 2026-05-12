@@ -126,6 +126,10 @@ public class Settings : MonoBehaviour {
                 range = "500";
                 break;
         }
+
+        if (buildingFetcher != null) {
+            buildingFetcher.TriggerFetchArea();
+        }
     }
 
     //toggle building visibility
