@@ -2,7 +2,7 @@
 
 > Planning, visualisation, and control of drone inspection missions around buildings.
 
-DroCo Mission Planner is a Unity application for preparing aerial inspections of buildings and construction complexes. It allows users to select a building directly on a 3D map, automatically create an inspection route around it, adjust individual waypoints, and then simulate the mission or send it to a real drone.
+DroCo Mission Planner is a Unity application for preparing aerial inspections of buildings and construction complexes. It allows users to select a building directly on a 3D map, automatically create an inspection route around it, adjust individual waypoints, and then simulate the mission or apply it to a real drone.
 
 The project was created as an extension of the DroCo system developed at the Faculty of Information Technology at Brno University of Technology.
 
@@ -30,7 +30,7 @@ DroCo brings this process together in one environment:
 2. the application loads its footprint from OpenStreetMap,
 3. an inspection trajectory is generated around the building,
 4. the user adjusts the route as needed,
-5. the mission is launched in the simulator or sent to the drone.
+5. the mission is launched in the simulator or applied to the drone's controller.
 
 The result is a clear 3D tool for reviewing and refining a planned mission before it is carried out.
 
@@ -107,7 +107,7 @@ This makes it possible to test the basic mission workflow without connecting a p
 
 ### 1. Select a building
 
-A building can be selected by double-clicking directly on the map. The application then sends a request to the Overpass API and loads the building geometry.
+A building can be selected by double-clicking directly on the map. The application then sends a request to the Overpass API and loads the building footprint geometry. However, an API request is not mandatory if there are preloaded models present. 
 
 <p align="center">
   <img src="docs/images/02-building.png" alt="Loaded building in the 3D map" width="800">
@@ -115,7 +115,7 @@ A building can be selected by double-clicking directly on the map. The applicati
 
 ### 2. Generate a trajectory
 
-After the building has been loaded, the application creates an inspection route at the selected altitude and distance from the building.
+After the building has been loaded, the application creates an inspection route at the selected altitude, step, distance from the building, and other parameters.
 
 <p align="center">
   <img src="docs/images/03-generated-mission.png" alt="Automatically generated inspection mission" width="800">
@@ -123,7 +123,7 @@ After the building has been loaded, the application creates an inspection route 
 
 ### 3. Edit waypoints manually
 
-Each waypoint can be selected and adjusted using 3D manipulators directly in the scene or through the control panel.
+Each waypoint can be selected and adjusted using 3D manipulators directly in the scene or through the control panel. Multiselection of waypoints is also supported.
 
 <p align="center">
   <img src="docs/images/04-waypoint-editing.png" alt="Editing a waypoint with a 3D manipulator" width="800">
@@ -131,7 +131,7 @@ Each waypoint can be selected and adjusted using 3D manipulators directly in the
 
 ### 4. Simulate or fly the mission
 
-The prepared mission can be started with the simulator or sent through DJIStreamer to a connected drone.
+The prepared mission can be started with the simulator or applied through DJIStreamer to a connected drone.
 
 <p align="center">
   <img
@@ -170,8 +170,6 @@ Communication between the Unity application and DJIStreamer takes place over Web
 - video frames,
 - commands for starting, pausing, and stopping a mission.
 
-Podrobnosti jsou uvedeny v dokumentu [`COMMUNICATION_API.md`](COMMUNICATION_API.md).
-
 ---
 
 ## Requirements
@@ -189,7 +187,7 @@ Podrobnosti jsou uvedeny v dokumentu [`COMMUNICATION_API.md`](COMMUNICATION_API.
 ### Running the simulator
 
 - Python 3
-- balíčky uvedené v [`requirements.txt`](requirements.txt)
+- packages in [`requirements.txt`](requirements.txt)
 
 Install the Python dependencies with:
 
