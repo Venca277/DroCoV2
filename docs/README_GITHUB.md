@@ -106,11 +106,6 @@ This makes it possible to test the basic mission workflow without connecting a p
 
 ## How it works
 
-<p align="center">
-  <!-- Screenshot of the map with a selected building -->
-  <img src="docs/images/01-map-selection.png" alt="Selecting a building on the 3D map" width="800">
-</p>
-
 ### 1. Select a building
 
 A building can be selected by double-clicking directly on the map. The application then sends a request to the Overpass API and loads the building geometry.
