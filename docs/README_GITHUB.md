@@ -138,8 +138,10 @@ Each waypoint can be selected and adjusted using 3D manipulators directly in the
 The prepared mission can be started with the simulator or sent through DJIStreamer to a connected drone.
 
 <p align="center">
-  <!-- Short demonstration video -->
-  <video src="media/mission-demo.mp4" controls width="800"></video>
+  <img
+    src="https://github.com/Venca277/DroCoV2/releases/download/Media/bc.gif"
+    alt="DroCo Mission Planner demonstration"
+    width="800">
 </p>
 
 ---
