@@ -7,7 +7,7 @@ DroCo Mission Planner is a Unity application for preparing aerial inspections of
 The project was created as an extension of the DroCo system developed at the Faculty of Information Technology at Brno University of Technology.
 
 <p align="center">
-  <img src="images/hero.png" alt="DroCo Mission Planner" width="900">
+  <img src="docs/images/hero.png" alt="DroCo Mission Planner" width="900">
 </p>
 
 <p align="center">
