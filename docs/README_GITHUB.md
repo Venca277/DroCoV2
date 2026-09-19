@@ -112,7 +112,7 @@ A building can be selected by double-clicking directly on the map. The applicati
 
 <p align="center">
   <!-- Screenshot of the loaded building -->
-  <img src="docs/images/02-building.png" alt="Loaded building in the 3D map" width="800">
+  <img src="images/02-building.png" alt="Loaded building in the 3D map" width="800">
 </p>
 
 ### 2. Generate a trajectory
@@ -121,7 +121,7 @@ After the building has been loaded, the application creates an inspection route 
 
 <p align="center">
   <!-- Screenshot of the generated mission -->
-  <img src="docs/images/03-generated-mission.png" alt="Automatically generated inspection mission" width="800">
+  <img src="images/03-generated-mission.png" alt="Automatically generated inspection mission" width="800">
 </p>
 
 ### 3. Edit waypoints manually
@@ -130,7 +130,7 @@ Each waypoint can be selected and adjusted using 3D manipulators directly in the
 
 <p align="center">
   <!-- Screenshot of waypoint editing -->
-  <img src="docs/images/04-waypoint-editing.png" alt="Editing a waypoint with a 3D manipulator" width="800">
+  <img src="images/04-waypoint-editing.png" alt="Editing a waypoint with a 3D manipulator" width="800">
 </p>
 
 ### 4. Simulate or fly the mission
@@ -139,7 +139,7 @@ The prepared mission can be started with the simulator or sent through DJIStream
 
 <p align="center">
   <!-- Short demonstration video -->
-  <video src="docs/media/mission-demo.mp4" controls width="800"></video>
+  <video src="media/mission-demo.mp4" controls width="800"></video>
 </p>
 
 ---
