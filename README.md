@@ -1,63 +1,383 @@
-# DroCo – V2
-Branch DroCoV2 presents a completely new and clean version 2.0 of the original DroCo, currently still in development. Tested on Unity version 2022.3.23.
+# DroCo Mission Planner
 
-## What's new
- - Possibility to switch to AR.
- - Synchronized video stream with flight data.
- - New map base layer – [ArcGIS](https://developers.arcgis.com/unity/).
- - Supports Google 3D dataset using [Cesium](https://cesium.com/learn/unity/unity-photorealistic-3d-tiles/).
- - New GUI design.
+> Planning, visualisation, and control of drone inspection missions around buildings.
 
-## DroCo – Multi-Drone Control Vizualization Tool
-[DroCo (VSTool)](https://www.fit.vut.cz/research/product/647/.en) is a tool for effective drone remote control using mixed reality that also supports communication and cooperation on a mission with multiple drones. The proposed solution is developed by [Robo@FIT, Brno University of Technology](https://www.fit.vut.cz/research/group/robo/.en) research group, and is inspired by the high mental load of the pilot in the control of the drone, especially in the performance of more complex missions (multiple drones, remote target, proximity to infrastructure etc.). The system is based on the extension of the 3D virtual model with real data (augmented virtuality). It uses temporal and spatial registration of:
- 1) off-line data (map data, elevation data, 3D building models) – currently supports ArcGIS and Cesium.
- 2) online data (video-stream, reconstructed 3D structures, location information, flight data)
- 3) virtual control objects (navigation points and directions, spatial areas, geo-fences, position of other drones, distance to nearby objects, preview map, or view from other drones). 
- 
-The system thus allows you to pilot the drone in FPV (first-person-view), but at any time, it can switch to TPV (third-person-view) so that one can look around freely in a situation with poor orientation, further directing the pilot to other mission objectives, points out close objects or other drones, etc. The system is currently being expanded with the functions of multiple drones, sharing more sensory information across the system and increasing network communication security. The development also aims to use a system for drone control training for pilots, increase the realism of drone behavior in simulated mode, more efficient mission management, and visualization of the status for the operator of the whole event.
+DroCo Mission Planner is a Unity application for preparing aerial inspections of buildings and construction complexes. It allows users to select a building directly on a 3D map, automatically create an inspection route around it, adjust individual waypoints, and then simulate the mission or send it to a real drone.
 
-The system supports importing planned missions from the mission planning software – [UgCS](https://www.sphengineering.com/flight-planning/ugcs):
-<img src=AVmission.png />
+The project was created as an extension of the DroCo system developed at the Faculty of Information Technology at Brno University of Technology.
 
-The mission can also be displayed in augmented reality:
-<img src=arView.png />
+<p align="center">
+  <img src="images/hero.png" alt="DroCo Mission Planner" width="900">
+</p>
 
-Multi-drone use cases are also supported:
-<img src=drocoV2_overview.png />
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#running-the-project">Run</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
 
-## Installation
- - Install [UnxUtils](https://sourceforge.net/projects/unxutils/) to be able to patch ArcGIS scripts using patch_arcgis.bat script.
- - Clone this repo:
-   ```bash
-   git clone git@github.com:robofit/drone_vstool.git
-   ```
- - Get submodules:
-   ```bash
-   cd drone_vstool
-   git submodule update --init
-   ```
- - Download multimedia files from LFS:
-   ```bash
-   git lfs install
-   git lfs pull
-   ```
- - Create a symlink of the submodules to the Assets folder:
-   ```bash
-   cd scripts
-   .\link_submodules.bat
-   ```
- - Load project in Unity and open **MainScene**, located in Assets/Scenes.
-### Setup ArcGIS
- - Create ArcGIS developer account and [create your API Key](https://developers.arcgis.com/documentation/security-and-authentication/api-key-authentication/tutorials/create-an-api-key/).
- - Paste the API Key to `ProjectSettings -> ArcGIS Maps SDK -> API Key`.
+---
 
-### Setup GStreamer (optional, not required)
- - Install GStreamer [1.20.1](https://gstreamer.freedesktop.org/data/pkg/windows/1.20.1/) – install both, regular and devel version based on your computer's architecture (msvc and x86_64 works for me).
- - Add gstreamer binary folder path to System Environment Variables – `Computer -> System properties -> Advanced System Settings -> Advanced Tab -> Environment Variables... -> System Variables -> Variable: Path -> Edit -> New -> C:\gstreamer\1.0\msvc_x86_64\bin`
- - Create new system variable – `New Variable: GST_SDK_PATH= C:\gstreamer\1.0\x86_64\`
- - If GStreamer is still not working inside Unity, try to install or reinstall the latest [MSVC redistributable libraries](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170).
+## About the project
 
-## Publications
- - [HUBINÁK, Róbert. Application for Efficient Drone Control Using Augmented Virtuality. Brno, 2020. Bachelor's thesis. Brno University of Technology, Faculty of Information Technology. Supervised by Beran Vítězslav.](https://www.fit.vut.cz/study/thesis-file/22839/22839.pdf)
- - [SEDLMAJER Kamil, BAMBUŠEK Daniel a BERAN Vítězslav. Effective Remote Drone Control Using Augmented Virtuality. In: Proceedings of the 3rd International Conference on Computer-Human Interaction Research and Applications 2019. Vienna: SciTePress - Science and Technology Publications, 2019, s. 177-182. ISBN 978-989-758-376-6.](https://www.fit.vut.cz/research/publication/12006/.en)
- - [SEDLMAJER, Kamil. User interface for drone control using augmented virtuality. Brno, 2019. Master's Thesis. Brno University of Technology, Faculty of Information Technology. 2019-06-14. Supervised by Beran Vítězslav.](https://www.fit.vut.cz/study/thesis-file/16730/16730.pdf)
+Building inspection with a drone often begins before the flight itself: choosing the right area, estimating the shape of the building, and preparing a safe route.
+
+DroCo brings this process together in one environment:
+
+1. the user selects a building on the map,
+2. the application loads its footprint from OpenStreetMap,
+3. an inspection trajectory is generated around the building,
+4. the user adjusts the route as needed,
+5. the mission is launched in the simulator or sent to the drone.
+
+The result is a clear 3D tool for reviewing and refining a planned mission before it is carried out.
+
+---
+
+## Features
+
+### 3D map and buildings
+
+- 3D map environment based on ArcGIS Maps SDK for Unity
+- direct building selection on the map
+- building highlighting when hovering over the map
+- building footprint retrieval from OpenStreetMap through the Overpass API
+- conversion of geographic coordinates into Unity 3D space
+
+### Automatic mission planning
+
+- automatic route generation based on the building footprint
+- configurable distance from the building
+- configurable vertical step and segment length
+- support for vertical and horizontal mission patterns
+- collision checking and a basic safety distance
+- route visualization using waypoints and connecting lines
+
+### Route editing
+
+- selection of individual waypoints in the scene
+- waypoint movement using 3D manipulators
+- adjustment of waypoint altitude and position
+- editing through controls in the user interface
+- mission parameters displayed in a side panel
+
+### Drone connection
+
+- WebSocket communication
+- server and client modes
+- transmission of telemetry, battery status, GPS data, and warnings
+- transmission of image data from the drone
+- Virtual Stick control support
+- uploading and controlling waypoint missions
+
+Verified real-flight platform:
+
+> DJI Mavic Mini 1 connected through the DJIStreamer application.
+
+### Simulation without a physical drone
+
+The project includes a simple Python simulator that connects to the Unity application and simulates:
+
+- movement between waypoints,
+- GPS coordinates,
+- altitude and orientation,
+- battery status,
+- signal strength and satellite count,
+- warning states,
+- an image stream.
+
+This makes it possible to test the basic mission workflow without connecting a physical drone.
+
+### User interface
+
+- overview of the drone status
+- battery and signal indicators
+- GPS and flight data
+- quick actions for the camera, video, return-to-home, and stopping
+- collapsible panels
+- live video preview
+- color-coded status icons
+- animated panel transitions
+
+---
+
+## How it works
+
+### 1. Select a building
+
+A building can be selected by double-clicking directly on the map. The application then sends a request to the Overpass API and loads the building geometry.
+
+<p align="center">
+  <img src="docs/images/02-building.png" alt="Loaded building in the 3D map" width="800">
+</p>
+
+### 2. Generate a trajectory
+
+After the building has been loaded, the application creates an inspection route at the selected altitude and distance from the building.
+
+<p align="center">
+  <img src="docs/images/03-generated-mission.png" alt="Automatically generated inspection mission" width="800">
+</p>
+
+### 3. Edit waypoints manually
+
+Each waypoint can be selected and adjusted using 3D manipulators directly in the scene or through the control panel.
+
+<p align="center">
+  <img src="docs/images/04-waypoint-editing.png" alt="Editing a waypoint with a 3D manipulator" width="800">
+</p>
+
+### 4. Simulate or fly the mission
+
+The prepared mission can be started with the simulator or sent through DJIStreamer to a connected drone.
+
+<p align="center">
+  <img
+    src="https://github.com/Venca277/DroCoV2/releases/download/Media/bc.gif"
+    alt="DroCo Mission Planner demonstration"
+    width="800">
+</p>
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    User[User] --> Unity[DroCo Mission Planner]
+    Unity --> ArcGIS[ArcGIS 3D map]
+    Unity --> OSM[OpenStreetMap / Overpass API]
+    Unity --> Mission[Mission generator and editor]
+    Mission --> Simulator[Python simulator]
+    Mission --> WebSocket[WebSocket communication]
+    WebSocket --> DJIStreamer[DJIStreamer Android]
+    DJIStreamer --> DJI[DJI drone]
+    DJI --> Telemetry[Telemetry and video]
+    Telemetry --> Unity
+```
+
+Communication between the Unity application and DJIStreamer takes place over WebSocket. The system can transfer, among other things:
+
+- information about the connected drone,
+- GPS position,
+- altitude and speed,
+- orientation,
+- battery status,
+- warnings,
+- mission progress,
+- video frames,
+- commands for starting, pausing, and stopping a mission.
+
+Podrobnosti jsou uvedeny v dokumentu [`COMMUNICATION_API.md`](COMMUNICATION_API.md).
+
+---
+
+## Requirements
+
+### Opening the Unity project
+
+- Unity Hub
+- Unity Editor `2022.3.23f1`
+- Visual Studio Community 2022 nebo kompatibilní IDE
+- Windows Build Support
+- Android Build Support
+- Git Bash
+- Visual C++ Redistributable 2015–2022 x64
+
+### Running the simulator
+
+- Python 3
+- balíčky uvedené v [`requirements.txt`](requirements.txt)
+
+Install the Python dependencies with:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## Running the project
+
+1. Open the project in Unity Editor `2022.3.23f1`.
+2. Open the scene:
+
+```text
+Assets/ArcGISMapsSDK/Scenes/MainScene
+```
+
+3. Start the scene by clicking **Play**.
+4. Wait for the map data to load.
+5. Double-click a building to create a mission.
+
+An internet connection is required to load the map and building data for the first time.
+
+---
+
+## Running the simulator
+
+First start the server mode in DroCo. Then run:
+
+```bash
+python drone_interactive.py 5556
+```
+
+The simulator connects to the local WebSocket server and begins sending telemetry to the Unity application.
+
+The simulator is intended primarily for development and workflow demonstrations. It is not a physically accurate flight simulation.
+
+---
+
+## Connecting a real drone
+
+To perform a real flight:
+
+1. start DroCo in server mode,
+2. connect the DJIStreamer application,
+3. enter the IP address of the computer running DroCo,
+4. use port `5556`,
+5. enable the live data stream,
+6. enable Virtual Sticks,
+7. start the prepared mission in DroCo.
+
+Before an actual flight, always verify:
+
+- GPS signal,
+- battery level,
+- available airspace,
+- safe altitude,
+- the return-to-home procedure,
+- the correct drone and controller configuration.
+
+Real-flight support was verified on the DJI Mavic Mini 1 platform.
+
+---
+
+## Building the project
+
+1. Open the project in the required Unity version.
+2. In Unity, select:
+
+```text
+File → Build Settings
+```
+
+3. Keep only the `MainScene` scene enabled.
+4. Select the target platform.
+5. Configure the resolution and window mode in `Player Settings`.
+6. Click **Build**.
+
+It is recommended to store the build output outside the main project directory.
+
+---
+
+## Project structure
+
+```text
+DroCo/
+├── Assets/
+│   ├── Scripts/
+│   │   ├── Buildings/    # loading buildings from OpenStreetMap
+│   │   ├── Drones/       # drone model and status
+│   │   ├── Managers/     # main application managers
+│   │   ├── Missions/     # mission generation and editing
+│   │   ├── UI/           # original user interface
+│   │   ├── UI2/          # extended user interface
+│   │   └── Waypoint/     # waypoint selection
+│   ├── Animations/
+│   ├── Icons/
+│   ├── Materials/
+│   ├── Models/
+│   ├── Prefabs/
+│   └── Settings/
+├── Packages/
+├── ProjectSettings/
+├── Submodules/
+├── drone_interactive.py
+├── COMMUNICATION_API.md
+├── QUICK_REFERENCE.md
+└── requirements.txt
+```
+
+The most important parts of the implementation are:
+
+| Area | Main files |
+|---|---|
+| Route generation | `Assets/Scripts/Missions/MissionGenerator.cs` |
+| Mission control | `Assets/Scripts/Missions/MissionController.cs` |
+| Waypoint editing | `Assets/Scripts/Missions/MissionEditor.cs` |
+| Navigation | `Assets/Scripts/Missions/Navigator.cs` |
+| Building retrieval | `Assets/Scripts/Buildings/BuildingFetcher.cs` |
+| OpenStreetMap data | `Assets/Scripts/Buildings/OSMData.cs` |
+| WebSocket server | `Assets/Scripts/Managers/WebSocketServer.cs` |
+| WebSocket client | `Assets/Scripts/Managers/WebSocketClient.cs` |
+| Drone status | `Assets/Scripts/Managers/StatusManager.cs` |
+
+---
+
+## Documentation
+
+- [`COMMUNICATION_API.md`](COMMUNICATION_API.md) – complete WebSocket API
+- [`QUICK_REFERENCE.md`](QUICK_REFERENCE.md) – quick overview of messages and commands
+- [`JSON_EXAMPLES.json`](JSON_EXAMPLES.json) – communication examples
+- [`README2.md`](README2.md) – running the build and simulator
+- [`README3.md`](README3.md) – program documentation
+- [`README4.md`](README4.md) – supporting materials
+- [`README5.md`](README5.md) – DJIStreamer application extension
+
+---
+
+## Limitations
+
+- Building retrieval depends on the availability of the Overpass API and an internet connection.
+- Real drone control was verified on the DJI Mavic Mini 1.
+- The Python simulator is not a physically accurate flight simulation.
+- The simulator's waypoint mode is intended for testing and demonstrations.
+- The quality and safety of a mission depend on the route configuration and actual flight conditions.
+
+---
+
+## Technologies
+
+- Unity `2022.3.23f1`
+- C#
+- Python
+- ArcGIS Maps SDK for Unity
+- OpenStreetMap
+- Overpass API
+- WebSocket
+- DJI SDK
+- GStreamer
+- TextMesh Pro
+- JetBrains Mono
+
+---
+
+## Author
+
+**Václav Sovák**  
+Faculty of Information Technology  
+Brno University of Technology
+
+Bachelor's thesis, 2026
+
+Supervisor: **Ing. Daniel Bambušek**
+
+---
+
+## Licence and sources
+
+This project extends the DroCo system developed at the Faculty of Information Technology at Brno University of Technology.
+
+Used sources and technologies:
+
+- [OpenStreetMap](https://www.openstreetmap.org/) – map data
+- [ArcGIS Maps SDK for Unity](https://developers.arcgis.com/unity/)
+- [JetBrains Mono](https://www.jetbrains.com/lp/mono/) – user interface font
+- [Google Material Icons](https://fonts.google.com/icons)
+- [DJI SDK](https://developer.dji.com/)
+- [GStreamer](https://gstreamer.freedesktop.org/)
+
+OpenStreetMap data is used in accordance with the ODbL licence.
