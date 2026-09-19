@@ -8,7 +8,7 @@ The project was created as an extension of the DroCo system developed at the Fac
 
 <p align="center">
   <!-- Replace this path with the main application screenshot -->
-  <img src="docs/images/hero.png" alt="DroCo Mission Planner" width="900">
+  <img src="images/hero.png" alt="DroCo Mission Planner" width="900">
 </p>
 
 <p align="center">
